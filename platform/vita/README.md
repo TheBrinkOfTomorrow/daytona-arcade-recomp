@@ -145,32 +145,59 @@ frontend; it uses SDL2's normal Vita renderer, not PVR/PIB. The vitaGL build
 (`--gpu-gl`) also needs `python3 scripts/setup_vitagl.py` once: it builds a pinned
 vitaGL inside the project (see "vitaGL: pinned build and flags" below).
 
-From the repository root, prepare the host build using your own complete
-`daytona93` ROM set in `roms/daytona93.zip` (or `.7z`):
+From the repository root, put your own complete ROM sets at
+`roms/daytona93.zip` and/or `roms/daytona.zip` (`.7z` is also accepted on the host).
+Prepare the host builds, then build the Vita package:
 
 ```sh
 python3 scripts/setup.py
-# After changing the seeds/recompilers, regenerate with the HOST compiler:
-python3 scripts/recompile.py
-# Build a separate ARM executable and installable package:
-python3 scripts/build_vita.py
+python3 scripts/setup_vitagl.py  # once, for the vitaGL renderer
+python3 scripts/build_vita.py --gpu-gl --release --fast-inaccuracy
 ```
 
-`setup.py` already recompiles when the ROM set is present. The explicit
-`recompile.py` command is only necessary after changes or when adding the
-ROM set later. The default output is:
+The default `--set auto` detects these ROM archives. With both sets present,
+a GPU build compiles both native executables and packages them together;
+with one set present, it builds that set. This applies to both `--gpu-gl` and
+`--gpu-fast`. The final package stays at the requested build directory, by default:
 
 ```text
 build/vita/daytona_vita.vpk
 ```
 
-A different host build directory is supported:
+`setup.py` prepares both detected sets: `build` for `daytona93` and
+`build-daytona` for Revision A. After changing seeds or recompilers, regenerate
+the affected host code before building the VPK:
 
 ```sh
-python3 scripts/build_vita.py --host-build-dir build-host --build-dir build/vita --jobs 4
+python3 scripts/recompile.py --set daytona93 --build-dir build
+python3 scripts/recompile.py --set daytona --build-dir build-daytona
 ```
 
-The equivalent CMake configuration is:
+Missing generated code still requires this host setup/recompile step; the Vita
+build does not run it automatically. Only run the commands for sets you own.
+For another host build directory, auto selection uses the same layout as
+`setup.py --build-dir`: `build-host` for `daytona93` and `build-host-daytona`
+for Revision A:
+
+```sh
+python3 scripts/build_vita.py --gpu-gl --host-build-dir build-host --build-dir build/vita --jobs 4
+```
+
+Use `--set daytona93` or `--set daytona` to select just one set even when both
+archives are present. An explicit set uses `--host-build-dir` exactly as supplied:
+
+```sh
+python3 scripts/build_vita.py --gpu-gl --set daytona93 --host-build-dir build
+python3 scripts/build_vita.py --gpu-gl --set daytona --host-build-dir build-daytona
+```
+
+The CPU renderer supports only `daytona93`: use
+`python3 scripts/build_vita.py --set daytona93` for that build. If auto selection
+finds Revision A without a GPU option, it reports an error and asks you to select
+a GPU renderer or explicitly select `daytona93`. `--compile-check` remains a
+ROM-free object compilation check and never creates a VPK.
+
+The equivalent CMake configuration for a single `daytona93` CPU build is:
 
 ```sh
 cmake -S platform/vita -B build/vita \
@@ -188,7 +215,7 @@ local, under the ignored `build/` directory.
 
 ## Install and play
 
-### Dual-ROM GXM package and LAN link play
+### Dual-ROM GPU package and LAN link play
 
 The dual package launches daytona93 by default. In Options, change ROM to
 DAYTONA (1994 REVISION A), then choose Start/Reset; switch back the same way.
@@ -217,17 +244,27 @@ match (for example TWIN/JPN); otherwise the game can cancel the link.
 Frame sync is optional, off by default. For solo Revision A play, disable
 link and configure a single cabinet in test mode.
 
-Build each set's generated sources separately using `scripts/recompile.py
---set daytona --build-dir build/revision-a-host` and the existing daytona93
-host build. Then:
+With both ROM archives and their host builds prepared as above, one command
+creates the dual package at `build/vita/daytona_vita.vpk`:
+
+```sh
+python3 scripts/build_vita.py --gpu-gl --release --fast-inaccuracy
+```
+
+For manual packaging from separate host directories, `--revision-a-self` still
+accepts a previously built Revision A executable. Prepare its host code with
+`scripts/recompile.py --set daytona --build-dir build/revision-a-host`, then:
 
 ```sh
 python3 scripts/build_vita.py --set daytona --gpu-fast --host-build-dir build/revision-a-host --build-dir build/vita-revision-a
 python3 scripts/build_vita.py --set daytona93 --gpu-fast --host-build-dir build --build-dir build/vita-dual --revision-a-self build/vita-revision-a/eboot.bin
 ```
 
-The second VPK contains both executables. Actual Vita-to-Vita/Vita-to-desktop
-Wi-Fi operation and executable switching require hardware validation.
+The second VPK, `build/vita-dual/daytona_vita.vpk`, contains both executables.
+Both automatic and manual dual packages contain `eboot.bin` for `daytona93`
+and `daytona.self` for Revision A. ROM data is not included. Actual
+Vita-to-Vita/Vita-to-desktop Wi-Fi operation and executable switching require
+hardware validation.
 
 Install your locally built VPK with VitaShell, then put your **complete
 ZIP ROM set** at:

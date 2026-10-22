@@ -35,8 +35,7 @@ vita::DiagnosticLog diagnostics; // only the main thread writes this log
 // or freopen may have closed stderr before failing to open its replacement.
 void startup_error(const char *message, size_t length) {
     diagnostics.append(message, length);
-    const SceUID fd = sceIoOpen("ux0:data/daytona93/vita.log",
-                               SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
+    const SceUID fd = sceIoOpen("ux0:data/daytona93/vita.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
     if (fd < 0) return;
     while (length) {
         const int written = sceIoWrite(fd, message, length);

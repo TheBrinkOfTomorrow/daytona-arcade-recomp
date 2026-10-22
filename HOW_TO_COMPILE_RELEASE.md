@@ -2,8 +2,9 @@
 
 ## You need
 
-* A Linux, macOS or WSL computer where the project is set up: your ROM set in
-  `roms/daytona93.zip`, then `python3 scripts/setup.py` (see [README.md](README.md)).
+* A Linux, macOS or WSL computer with your complete ROM sets at
+  `roms/daytona93.zip` and/or `roms/daytona.zip` (`.7z` is also accepted on the
+  host), then `python3 scripts/setup.py` (see [README.md](README.md)).
 * [VitaSDK](https://vitasdk.org) with its default packages (SDL2 and taiHEN are used),
   and `VITASDK` set.
 * On the Vita: homebrew enabled and `libshacccg.suprx` extracted
@@ -14,13 +15,38 @@
 ```sh
 export VITASDK=/usr/local/vitasdk
 python3 scripts/setup.py
-python3 scripts/recompile.py
 python3 scripts/setup_vitagl.py  # once: builds vitaGL in extern/vitagl
 python3 scripts/build_vita.py --gpu-gl --fast-inaccuracy --release
 ```
 
-The result is `build/vita/daytona_vita.vpk`. Install it with VitaShell and copy your
-ROM set to `ux0:data/daytona93/daytona93.zip`.
+The build defaults to `--set auto` and detects the ROM archives in `roms/`.
+With both sets present, this one Vita build command packages both native
+executables into **`build/vita/daytona_vita.vpk`**. With one set present, it
+packages that set. `setup.py` prepares the required host code in `build` for
+`daytona93` and `build-daytona` for Revision A; the Vita build requires that
+code to exist already.
+
+Install the VPK with VitaShell and copy each complete ZIP ROM set to its path:
+
+* `ux0:data/daytona93/daytona93.zip`
+* `ux0:data/daytona/daytona.zip`
+
+In the dual package, select the ROM in Options and choose Start/Reset. The VPK
+contains `eboot.bin` and `daytona.self`; it does not include ROM data.
+
+To build just one set even when both archives are present, select it explicitly:
+
+```sh
+python3 scripts/build_vita.py --gpu-gl --fast-inaccuracy --release --set daytona93
+python3 scripts/build_vita.py --gpu-gl --fast-inaccuracy --release --set daytona --host-build-dir build-daytona
+```
+
+After changes to seeds or recompilers, regenerate the affected host code with
+`python3 scripts/recompile.py --set daytona93 --build-dir build` and/or
+`python3 scripts/recompile.py --set daytona --build-dir build-daytona` before
+building again. See [the Vita build guide](platform/vita/README.md#build) for
+custom directories, the CPU renderer and manual `--revision-a-self` packaging.
+`--compile-check` only compiles objects and never produces a VPK.
 
 ## How it runs
 

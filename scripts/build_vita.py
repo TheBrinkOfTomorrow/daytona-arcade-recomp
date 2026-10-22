@@ -5,6 +5,9 @@ First run the setup/recompile pipeline with your own selected ROM set
 (python3 scripts/recompile.py, once, in any mode). --fast-inaccuracy and
 --fast-gen then make the Vita's own game code here from the host tools and
 ROM cache, whatever mode the host code was generated in (see vita_code).
+By default, detect roms/daytona93.zip/.7z and roms/daytona.zip/.7z, using
+setup.py's build and build-daytona host directories. GPU builds package both
+executables when both sets are present. --set selects just one game instead.
 This command never executes cross-built importers, copies ROMs, or packages
 ROM data. --compile-check builds objects without ROMs and does not make a VPK.
 """
@@ -12,9 +15,11 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
+from zipfile import BadZipFile, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = ("daytona93/gen_table.cpp", "daytona93_tgp/tgp_gen.cpp", "daytona93_snd/snd_gen.cpp")
@@ -149,10 +154,64 @@ def vitagl_summary(prefix):
     return f"pinned {stamp['pins']['vitaGL'][:10]}, {stamp.get('profile')}: {flags or 'default flags'}"
 
 
+def check_package(build, revision_a_self):
+    """Reject missing/stale executables, including an old single-game VPK."""
+    package = build / "daytona_vita.vpk"
+    if not package.is_file():
+        raise RuntimeError(f"build completed without the expected package: {package}")
+    executables = {"eboot.bin": build / "eboot.bin"}
+    if revision_a_self:
+        executables["daytona.self"] = revision_a_self
+    try:
+        with ZipFile(package) as archive:
+            for name, source in executables.items():
+                if not source.is_file():
+                    raise RuntimeError(f"build completed without the expected executable: {source}")
+                if name not in archive.namelist():
+                    raise RuntimeError(f"package is missing {name}: {package}")
+                if archive.read(name) != source.read_bytes():
+                    raise RuntimeError(f"package contains an outdated {name}: {package}")
+            if not revision_a_self and "daytona.self" in archive.namelist():
+                raise RuntimeError(f"single-game package still contains daytona.self: {package}")
+    except BadZipFile as error:
+        raise RuntimeError(f"invalid VPK {package}: {error}") from error
+
+
+def build_game(args, game, host, build, sdk, revision_a_self):
+    gen = host / "gen"
+    code = "host-generated (scripts/recompile.py output as is)"
+    if args.code and not args.compile_check:
+        gen, code = vita_code(host, gen, build, args.code, game)
+    vitagl_dir = (ROOT / args.vitagl_dir).resolve()
+    env = os.environ.copy()
+    env["VITASDK"] = str(sdk)
+    env["PATH"] = str(sdk / "bin") + os.pathsep + env.get("PATH", "")
+    run(["cmake", "-S", ROOT / "platform/vita", "-B", build,
+         f"-DCMAKE_TOOLCHAIN_FILE={sdk / 'share/vita.toolchain.cmake'}", "-DCMAKE_BUILD_TYPE=Release",
+         f"-DDAYTONA_GEN_ROOT={gen}",
+         f"-DDAYTONA_VITA_ROMSET={game}",
+         f"-DDAYTONA_VITA_REV_A_SELF={revision_a_self or ''}",
+         f"-DDAYTONA_VITA_RENDER_OPT={'OFF' if args.reference_renderer else 'ON'}",
+         f"-DDAYTONA_VITA_FAST_PATHS={'OFF' if args.no_fast_paths else 'ON'}",
+         f"-DDAYTONA_VITA_DIAGNOSTICS={'ON' if args.diagnostics else 'OFF'}",
+         f"-DDAYTONA_VITA_LTO={'ON' if args.release else 'OFF'}",
+         f"-DDAYTONA_VITA_GPU_FAST={'ON' if args.gpu_fast else 'OFF'}",
+         f"-DDAYTONA_VITA_GPU_GL={'ON' if args.gpu_gl else 'OFF'}",
+         f"-DDAYTONA_VITA_FREE_CORES={'ON' if args.free_core else 'OFF'}",
+         f"-DDAYTONA_VITA_COMPILE_CHECK={'ON' if args.compile_check else 'OFF'}",
+         *([f"-DDAYTONA_VITAGL_DIR={vitagl_dir}"] if args.gpu_gl else [])], env)
+    run(["cmake", "--build", build, "--parallel", args.jobs], env)
+    if not args.compile_check:
+        check_package(build, revision_a_self)
+    return code
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--host-build-dir", type=Path, default=Path("build"))
-    ap.add_argument("--set", choices=("daytona93", "daytona"), default="daytona93")
+    ap.add_argument("--host-build-dir", type=Path, default=Path("build"),
+                    help="host build; auto selection uses DIR-daytona for Revision A, matching setup.py")
+    ap.add_argument("--set", choices=("auto", "daytona93", "daytona"), default="auto",
+                    help="auto (default): build available ROM sets; specify a set to build only that game")
     ap.add_argument("--revision-a-self", type=Path, help="bundle the built Revision A eboot.bin as daytona.self")
     ap.add_argument("--build-dir", type=Path, default=Path("build/vita"))
     ap.add_argument("--vitasdk", type=Path, default=os.environ.get("VITASDK"))
@@ -182,9 +241,7 @@ def main(argv=None):
                            "TGP fast mode. Without either: the host-generated code as it is")
     args = ap.parse_args(argv)
     gpu_build = args.gpu_fast or args.gpu_gl
-    if args.set != "daytona93" and not gpu_build:
-        ap.error("Revision A selection requires --gpu-fast or --gpu-gl")
-    if args.revision_a_self and (args.set != "daytona93" or not gpu_build):
+    if args.revision_a_self and (args.set == "daytona" or not gpu_build):
         ap.error("--revision-a-self requires the daytona93 --gpu-fast or --gpu-gl launcher")
     if args.free_core and not gpu_build:
         ap.error("--free-core applies to the GPU builds (--gpu-fast or --gpu-gl)")
@@ -196,57 +253,72 @@ def main(argv=None):
     toolchain = sdk / "share/vita.toolchain.cmake"
     if not toolchain.is_file():
         ap.error(f"missing VitaSDK toolchain: {toolchain}")
-    host = (ROOT / args.host_build_dir).resolve()
+    host_argument = ROOT / args.host_build_dir
+    base_host = host_argument.resolve()
     build = (ROOT / args.build_dir).resolve()
-    gen = host / "gen"
-    if build == host or build == ROOT or build == gen or gen in build.parents:
-        ap.error("use a separate cross-build directory, not the host build or its generated sources")
-    if not args.compile_check:
-        required = tuple(name.replace("daytona93", args.set) for name in REQUIRED)
+    auto = args.set == "auto" and not args.compile_check and not args.revision_a_self
+    games = [args.set if args.set != "auto" else "daytona93"]
+    if auto:
+        games = [game for game in ("daytona93", "daytona")
+                 if any((ROOT / "roms" / f"{game}.{ext}").is_file() for ext in ("zip", "7z"))]
+        # Keep supporting builds from an existing host cache without the archive.
+        if not games:
+            games = ["daytona93"]
+    if "daytona" in games and not gpu_build:
+        ap.error("Revision A selection requires --gpu-fast or --gpu-gl; "
+                 "use --set daytona93 for the CPU frontend")
+    hosts = {game: host_argument.with_name(host_argument.name + "-daytona").resolve()
+             if auto and game == "daytona" else base_host for game in games}
+    dual = len(games) == 2
+    # Build Revision A first so the final daytona93 VPK can include its SELF.
+    plans = [(game, hosts[game], (build / "revision-a").resolve() if dual and game == "daytona" else build)
+             for game in reversed(games)]
+    if dual and (plans[0][2] == build or plans[0][2] in build.parents):
+        ap.error("use separate cross-build directories for the two ROM sets")
+    revision_a_self = (ROOT / args.revision_a_self).resolve() if args.revision_a_self else None
+    if revision_a_self and not args.compile_check and not revision_a_self.is_file():
+        ap.error(f"missing Revision A executable: {revision_a_self}")
+    # Check every selected host before starting either build, keeping generated
+    # sources separate even when custom output directories are supplied.
+    for game, host, output in plans:
+        for other_host in hosts.values():
+            gen = other_host / "gen"
+            if (output == ROOT or output == other_host or output in other_host.parents or
+                    output == gen or gen in output.parents):
+                ap.error("use a separate cross-build directory, not the host build or its generated sources")
+        if args.compile_check:
+            continue
+        gen = host / "gen"
+        regenerate = shlex.join(["python3", "scripts/recompile.py", "--set", game, "--build-dir", str(host)])
+        required = tuple(name.replace("daytona93", game) for name in REQUIRED)
         missing = [str(gen / name) for name in required if not (gen / name).is_file()]
         if missing:
-            ap.error("missing host-generated code:\n" + "\n".join(missing) +
-                     "\nRun python3 scripts/recompile.py with the host compiler first.")
-    if gpu_build and not args.compile_check:
-        if not any("rt::hook_draw_list(" in source.read_text()
-                   for source in (gen / args.set).glob("chunk_*.cpp")):
-            ap.error("generated game code lacks the draw-distance hook; regenerate with scripts/recompile.py")
-    code = "host-generated (scripts/recompile.py output as is)"
-    if args.code and not args.compile_check:
-        gen, code = vita_code(host, gen, build, args.code, args.set)
+            ap.error(f"missing host-generated code for {game}:\n" + "\n".join(missing) +
+                     f"\nRun {regenerate} with the host compiler first (or run scripts/setup.py for both sets).")
+        if gpu_build and not any("rt::hook_draw_list(" in source.read_text()
+                                 for source in (gen / game).glob("chunk_*.cpp")):
+            ap.error(f"generated game code for {game} lacks the draw-distance hook; regenerate with {regenerate}")
+
+    for game, host, output in plans:
+        print(f"Building {game}" + (" (dual-ROM package)" if dual else ""), flush=True)
+        code = build_game(args, game, host, output, sdk, revision_a_self)
+        if dual and game == "daytona":
+            revision_a_self = output / "eboot.bin"
     vitagl_dir = (ROOT / args.vitagl_dir).resolve()
     vitagl = vitagl_summary(vitagl_dir) if args.gpu_gl else "-"
-    env = os.environ.copy()
-    env["VITASDK"] = str(sdk)
-    env["PATH"] = str(sdk / "bin") + os.pathsep + env.get("PATH", "")
-    run(["cmake", "-S", ROOT / "platform/vita", "-B", build,
-         f"-DCMAKE_TOOLCHAIN_FILE={toolchain}", "-DCMAKE_BUILD_TYPE=Release",
-         f"-DDAYTONA_GEN_ROOT={gen}",
-         f"-DDAYTONA_VITA_ROMSET={args.set}",
-         f"-DDAYTONA_VITA_REV_A_SELF={(ROOT / args.revision_a_self).resolve() if args.revision_a_self else ''}",
-         f"-DDAYTONA_VITA_RENDER_OPT={'OFF' if args.reference_renderer else 'ON'}",
-         f"-DDAYTONA_VITA_FAST_PATHS={'OFF' if args.no_fast_paths else 'ON'}",
-         f"-DDAYTONA_VITA_DIAGNOSTICS={'ON' if args.diagnostics else 'OFF'}",
-         f"-DDAYTONA_VITA_LTO={'ON' if args.release else 'OFF'}",
-         f"-DDAYTONA_VITA_GPU_FAST={'ON' if args.gpu_fast else 'OFF'}",
-         f"-DDAYTONA_VITA_GPU_GL={'ON' if args.gpu_gl else 'OFF'}",
-         f"-DDAYTONA_VITA_FREE_CORES={'ON' if args.free_core else 'OFF'}",
-         f"-DDAYTONA_VITA_COMPILE_CHECK={'ON' if args.compile_check else 'OFF'}",
-         *([f"-DDAYTONA_VITAGL_DIR={vitagl_dir}"] if args.gpu_gl else [])], env)
-    run(["cmake", "--build", build, "--parallel", args.jobs], env)
     if args.compile_check:
         print("Compile check complete. No linked game or VPK was built." + (f"\nvitaGL: {vitagl}" if args.gpu_gl else ""))
     else:
         package = build / "daytona_vita.vpk"
-        if not package.is_file():
-            raise RuntimeError(f"build completed without the expected package: {package}")
         mode = "GPU GL (vitaGL)" if args.gpu_gl else ("GPU FAST" if args.gpu_fast else "CPU EXACT")
         cores = ("free (--free-core)" if args.free_core else "pinned: main 0, geometry 1, sound 2") if gpu_build else "-"
         kind = "release (LTO, no logs)" if args.release else ("diagnostics (logs)" if args.diagnostics else "normal (no logs)")
         paths = "off (--no-fast-paths)" if args.no_fast_paths else "on (M2_FAST_BUS/TGP/CPU/GEO)"
+        packaged_games = ["daytona93", "daytona"] if revision_a_self else games
         print(f"VPK: {package}\nRenderer build: {mode}\nvitaGL: {vitagl}\nCores: {cores}\nBuild: {kind}\nGame code: {code}\n"
               f"Runtime fast paths: {paths}\nLiveArea images: {livearea_summary()}\n"
-              f"ROM location on Vita: ux0:data/{args.set}/{args.set}.zip")
+              f"ROM sets in VPK: {', '.join(packaged_games)}\n" +
+              "\n".join(f"ROM location on Vita: ux0:data/{game}/{game}.zip" for game in packaged_games))
     return 0
 
 
