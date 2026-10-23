@@ -1,5 +1,35 @@
 # Handoff
 
+## Sega Rally (srallyc) M0: importer and board type (2026-10-23)
+
+Second game, design doc section "Second game: Sega Rally Championship". The
+importer (`src/runtime/rom_import.cpp`) has the srallyc Rev C table: 23
+files, CRCs from MAME's `ROM_START(srallyc)`, all matching a user's merged
+`srallyc.7z` (which also holds Rev A/B and DX files; only Rev C's are read).
+A new image, `samples` (the SCSP's 8 MB sample ROM, swapped like the 68000
+program); `pcm1`/`pcm2` are only made for sets that load them. Per-set
+ROM_COPY mirrors (none for srallyc) and per-set TGP program place, length
+and CRC.
+
+TGP program: Daytona's opening jump table is not in srallyc's main_data;
+it is at 0x05ae94 in the program ROM. 1,666 words, from Daytona's
+last-word-is-its-index convention, CRC 0x5c529c56. Provisional until MAME's
+upload is compared.
+
+CMake: `M2_ROMSET` accepts srallyc; `M2_BOARD` follows it (model2o,
+model2a) and is a compile definition. For model2a only the tools build.
+`recompile.py --set srallyc` imports into `rom_cache/srallyc` and stops;
+`setup.py` lists the set and `--list-roms` prints its 23 files.
+
+Checked: daytona93's ten images from the new importer are byte-identical
+(SHA-256) to the previous importer's; Linux GCC, 20 of 20 CTests pass.
+srallyc: `m2import` and `recompile.py --set srallyc` on the 7z both pass
+every CRC and the TGP CRC.
+
+Open: the polygon region is still 16 MB (MAME's srallyc region is 32 MB,
+8 MB loaded; bit 24 of a model address reads zeros in MAME, a mirror here);
+the video board ROMs (`mpr-16310/16311/16312`) are not loaded.
+
 ## Setup --jobs and --list-roms (2026-10-23)
 
 `scripts/setup.py --jobs N` (`-j N`, default `os.cpu_count()`) is passed to

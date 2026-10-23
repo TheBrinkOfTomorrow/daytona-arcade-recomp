@@ -1,7 +1,8 @@
 // Load the user's ROM set (a MAME-format zip or 7z) into the memory images
 // the board runs from, in memory: every file CRC-checked against MAME's
 // ROM_START for the set this build was recompiled from (M2_ROMSET:
-// daytona93, the default, or daytona, Revision A), then laid out as MAME
+// daytona93, the default, daytona, Revision A, or srallyc, Sega Rally
+// Championship, which imports but does not run yet), then laid out as MAME
 // loads it (ROM_LOAD32_WORD interleave, ROM_COPY mirrors). The build's
 // importer (tools/m2import) uses the same tables; scripts/m2import.py is the
 // zip-only daytona93 reference they were checked against.

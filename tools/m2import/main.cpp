@@ -40,12 +40,15 @@ int main(int argc, char **argv) {
         write(out + "/polygons.bin", img.polygons.data(), img.polygons.size());
         write(out + "/textures.bin", img.textures.data(), img.textures.size());
         write(out + "/sound_program.bin", img.sound_program.data(), img.sound_program.size());
-        write(out + "/pcm1.bin", img.pcm1.data(), img.pcm1.size());
-        write(out + "/pcm2.bin", img.pcm2.data(), img.pcm2.size());
+        if (!img.pcm1.empty()) { // the Model 1 sound board's MultiPCMs (Daytona)
+            write(out + "/pcm1.bin", img.pcm1.data(), img.pcm1.size());
+            write(out + "/pcm2.bin", img.pcm2.data(), img.pcm2.size());
+        }
+        if (!img.samples.empty()) write(out + "/samples.bin", img.samples.data(), img.samples.size()); // SCSP (Model 2A)
         const std::vector<uint8_t> tgp = rt::tgp_program(img); // the TGP program the i960 uploads at boot
         write(out + "/tgp_program.bin", tgp.data(), tgp.size());
-        std::printf("m2import: wrote program, main_data, copro_data, copro_tables, polygons, textures, sound_program, pcm1, pcm2, tgp_program to %s\n",
-                    out.c_str());
+        std::printf("m2import: wrote program, main_data, copro_data, copro_tables, polygons, textures, sound_program, %s, tgp_program to %s\n",
+                    img.pcm1.empty() ? "samples" : "pcm1, pcm2", out.c_str());
         return 0;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "m2import: %s\n", e.what());

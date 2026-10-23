@@ -2,11 +2,13 @@
 """Recompile the game's i960 code, its TGP program and the sound board's 68000
 program to native C++ and build them. Same steps on Linux, macOS and Windows.
 
-  recompile.py [--set daytona93|daytona] [--build-dir build] [--config Release] [--jobs N] [--fast_inaccuracy]
+  recompile.py [--set daytona93|daytona|srallyc] [--build-dir build] [--config Release] [--jobs N] [--fast_inaccuracy]
 
 Needs the user's ROM set at roms/<set>.zip or roms/<set>.7z (git-ignored):
 daytona93 (Daytona USA Deluxe '93, the default) or daytona (Revision A,
 1994; give it its own build directory, e.g. --build-dir build-daytona).
+srallyc (Sega Rally Championship, Revision C, Model 2A-CRX) is only
+imported so far: its board and i960 seeds are not written yet.
 Everything
 derived from it (images, generated C++) goes under the build directory,
 which is git-ignored: never commit it.
@@ -39,6 +41,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # failure to recompile or build (which exit 1, with the tool's own errors).
 ROM_REJECTED_EXIT = 3
 
+# Sets on the Model 2A-CRX board (CMake's M2_BOARD model2a): imported only, for now.
+MODEL2A_SETS = ("srallyc",)
+
 
 def run(cmd, **kw):
     print("+ " + " ".join(cmd), flush=True)
@@ -57,7 +62,7 @@ def tool(build, config, name):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--set", default="daytona93", choices=["daytona93", "daytona"])
+    ap.add_argument("--set", default="daytona93", choices=["daytona93", "daytona", "srallyc"])
     ap.add_argument("--build-dir", default="build")
     ap.add_argument("--config", default="Release")
     ap.add_argument("--jobs", "-j", type=int, default=os.cpu_count() or 1, metavar="N",
@@ -74,12 +79,17 @@ def main():
     build_cmd = ["cmake", "--build", build, "--config", args.config]
     # the build directory is for one ROM set (CMake's M2_ROMSET)
     run(["cmake", "-S", ".", "-B", build, "-DM2_ROMSET=" + args.set])
-    if not all(os.path.exists(os.path.join(cache, f)) for f in ("tgp_program.bin", "sound_program.bin", "pcm1.bin")):
+    samples = "samples.bin" if args.set in MODEL2A_SETS else "pcm1.bin"  # SCSP or MultiPCM sound board
+    if not all(os.path.exists(os.path.join(cache, f)) for f in ("tgp_program.bin", "sound_program.bin", samples)):
         if not roms:
             sys.exit(f"recompile: put your ROM set at roms/{args.set}.zip (or .7z) first")
         run(build_cmd + ["--target", "m2import"])
         if subprocess.run([tool(build, args.config, "m2import"), roms[0], cache], cwd=ROOT).returncode:
             sys.exit(ROM_REJECTED_EXIT)  # m2import printed which file is missing or wrong
+    if args.set in MODEL2A_SETS:
+        print(f"recompile: {args.set} imported to {os.path.relpath(cache, ROOT)}; its board (Model 2A-CRX) and "
+              "i960 seeds are not written yet, so the game is not recompiled")
+        return
     run(build_cmd + ["--parallel", str(args.jobs), "--target", "m2recomp", "m2tgprecomp", "m2sndrecomp"])
 
     gen = os.path.join(build, "gen", args.set)

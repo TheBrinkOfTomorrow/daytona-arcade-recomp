@@ -228,7 +228,7 @@ def rom_manifest():
     shared_block = re.search(r"#define SHARED_LOADS(.*?)\n\n", src, re.S).group(1)
     shared = [(f, int(size, 16), int(crc, 16), True) for f, crc, size in entry.findall(shared_block)]
     sets = {}
-    for var, romset in (("kDaytona93", "daytona93"), ("kDaytona", "daytona")):
+    for var, romset in (("kDaytona93", "daytona93"), ("kDaytona", "daytona"), ("kSrallyc", "srallyc")):
         body = re.search(r"const Load " + var + r"\[\] = \{(.*?)\n\};", src, re.S).group(1)
         own = [(f, int(size, 16), int(crc, 16), False) for f, crc, size in entry.findall(body)]
         sets[romset] = own + (shared if "SHARED_LOADS" in body else [])
@@ -282,7 +282,7 @@ def list_roms():
             if other:
                 print(f"  It also holds {len(other)} file{'s' * (len(other) > 1)} of the other set ({', '.join(other)}): "
                       "the two sets may have been mixed up.")
-    print("\n'shared' files are the same in both sets.")
+    print("\n'shared' files are the same in both Daytona sets.")
 
 
 def main():
@@ -379,7 +379,8 @@ def main():
 
 EXE = ".exe" if WINDOWS else ""
 # The ROM sets the game can be recompiled from: roms/<set>.zip or .7z.
-SETS = [("daytona93", "Daytona USA Deluxe '93 (daytona93)"), ("daytona", "Daytona USA Revision A, 1994 (daytona)")]
+SETS = [("daytona93", "Daytona USA Deluxe '93 (daytona93)"), ("daytona", "Daytona USA Revision A, 1994 (daytona)"),
+        ("srallyc", "Sega Rally Championship Revision C (srallyc; imported only, does not run yet)")]
 
 BUILD_FAILED = """
 setup: your ROM set was accepted, but recompiling or building the game

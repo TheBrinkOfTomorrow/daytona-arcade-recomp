@@ -64,6 +64,7 @@ public:
     struct Images {
         std::vector<uint8_t> program, main_data, copro_tables, copro_data, polygons, textures;
         std::vector<uint8_t> sound_program, pcm1, pcm2; // sound board (68000 program, MultiPCM samples)
+        std::vector<uint8_t> samples; // Model 2A's SCSP sound board: its sample ROM (empty on Daytona)
 #ifdef M2_DC_MEMORY
         // The Dreamcast: program, main_data, polygons, textures and copro_data
         // are read through rom (those images stay empty); texture RAM (tex0

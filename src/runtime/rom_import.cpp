@@ -12,7 +12,7 @@ namespace rt {
 
 namespace {
 
-enum Region { Program, MainData, CoproData, Polygons, Textures, CoproTables, SoundProgram, Pcm1, Pcm2 };
+enum Region { Program, MainData, CoproData, Polygons, Textures, CoproTables, SoundProgram, Pcm1, Pcm2, Samples };
 
 struct Load {
     const char *file;
@@ -22,8 +22,9 @@ struct Load {
                            // the sound regions load whole files (see import_rom_set)
 };
 
-// MAME model2.cpp ROM_START(daytona93), ROM_START(daytona) and
-// MODEL2_CPU_BOARD at dddd7368. The parts both sets share come first.
+// MAME model2.cpp ROM_START(daytona93), ROM_START(daytona), ROM_START(srallyc)
+// and MODEL2_CPU_BOARD at dddd7368. The parts both Daytona sets share come
+// first.
 #define SHARED_LOADS                                                         \
     {"mpr-16528.10", 0x9CE591F6, MainData, 0x000000, 0x200000},              \
     {"mpr-16529.11", 0xF7095EAF, MainData, 0x000002, 0x200000},              \
@@ -81,20 +82,57 @@ const Load kDaytona[] = {
 };
 #undef SHARED_LOADS
 
+// Sega Rally Championship, Revision C (srallyc), Model 2A-CRX. Its own sound
+// board: a 68000 with an SCSP, whose sample ROMs load like the 68000's
+// program (ROM_LOAD16_WORD_SWAP into a big-endian region). The video board's
+// ROMs (MODEL2A_VID_BOARD, "video_unk" in MAME), the drive board's and the
+// comm board's are not loaded, as for Daytona.
+const Load kSrallyc[] = {
+    {"epr-17888c.12", 0x3D6808AA, Program, 0x000000, 0x080000},
+    {"epr-17889c.13", 0xF43C7802, Program, 0x000002, 0x080000},
+    {"mpr-17746.10", 0x8FE311F4, MainData, 0x000000, 0x200000},
+    {"mpr-17747.11", 0x543593FD, MainData, 0x000002, 0x200000},
+    {"mpr-17744.8", 0x71FED098, MainData, 0x400000, 0x200000},
+    {"mpr-17745.9", 0x8ECCA705, MainData, 0x400002, 0x200000},
+    {"mpr-17884.6", 0x4CFC95E1, MainData, 0x800000, 0x200000},
+    {"mpr-17885.7", 0xA08D2467, MainData, 0x800002, 0x200000},
+    {"mpr-17754.28", 0x81A84F67, CoproData, 0x000000, 0x200000},
+    {"mpr-17755.29", 0x2A6E7DA4, CoproData, 0x000002, 0x200000},
+    {"mpr-17748.16", 0x3148A2B2, Polygons, 0x000000, 0x200000},
+    {"mpr-17750.20", 0x232AEC29, Polygons, 0x000002, 0x200000},
+    {"mpr-17749.17", 0x0838D184, Polygons, 0x400000, 0x200000},
+    {"mpr-17751.21", 0xED87AC62, Polygons, 0x400002, 0x200000},
+    {"mpr-17753.25", 0x6DB0EB36, Textures, 0x000000, 0x200000},
+    {"mpr-17752.24", 0xD6AA86CE, Textures, 0x000002, 0x200000},
+    {"opr-14742a.45", 0x90C6B117, CoproTables, 0x000000, 0x020000},
+    {"opr-14743a.46", 0xAE7F446B, CoproTables, 0x000002, 0x020000},
+    {"epr-17890a.30", 0x5BAC3FA1, SoundProgram, 0x000000, 0x040000},
+    {"mpr-17756.31", 0x7725F111, Samples, 0x000000, 0x200000},
+    {"mpr-17757.32", 0x1616E649, Samples, 0x200000, 0x200000},
+    {"mpr-17886.36", 0x54A72923, Samples, 0x400000, 0x200000},
+    {"mpr-17887.37", 0x38C31FDD, Samples, 0x600000, 0x200000},
+};
+
 // Per set: its files; main_data's ROM_COPY source (copied to every 1 MB
-// from there up to 0xF00000); where the TGP program the i960 uploads at
-// boot sits in main_data (found by matching MAME's upload; the same 2,024
-// words in both sets, checked by CRC).
+// from there up to 0xF00000; 0: none); where the TGP program the i960
+// uploads at boot sits, its length and CRC. Daytona's is in main_data (found
+// by matching MAME's upload; the same 2,024 words in both sets). Sega
+// Rally's is in the i960 program ROM: found by its opening jump table, the
+// same as Daytona's, and its length by the last word holding its own index
+// (Daytona's last word is 0x7e7, word 2,023). Not yet checked against MAME's
+// upload.
 struct Set {
     const char *name;
     const Load *loads;
     size_t count;
-    uint32_t mirror_from, tgp_offset;
+    uint32_t mirror_from;
+    Region tgp_region;
+    uint32_t tgp_offset, tgp_words, tgp_crc;
 };
-constexpr uint32_t kTgpWords = 2024, kTgpCrc = 0xD6D611DDu;
 const Set kSets[] = {
-    {"daytona93", kDaytona93, std::size(kDaytona93), 0x900000, 0x860020},
-    {"daytona", kDaytona, std::size(kDaytona), 0x800000, 0x800020},
+    {"daytona93", kDaytona93, std::size(kDaytona93), 0x900000, MainData, 0x860020, 2024, 0xD6D611DDu},
+    {"daytona", kDaytona, std::size(kDaytona), 0x800000, MainData, 0x800020, 2024, 0xD6D611DDu},
+    {"srallyc", kSrallyc, std::size(kSrallyc), 0, Program, 0x05AE94, 1666, 0x5C529C56u},
 };
 
 const Set &this_set() {
@@ -139,9 +177,14 @@ M2Board::Images import_rom_set(const std::string &zip_path) {
     img.textures.assign(0x1000000, 0);
     img.copro_tables.assign(0x40000, 0);
     img.sound_program.assign(0x40000, 0);
-    img.pcm1.assign(0x400000, 0);
-    img.pcm2.assign(0x400000, 0);
     const Set &set = this_set();
+    for (const Load &l : std::span(set.loads, set.count)) {
+        if (l.region == Pcm1 || l.region == Pcm2) { // the Model 1 sound board's MultiPCMs
+            img.pcm1.assign(0x400000, 0);
+            img.pcm2.assign(0x400000, 0);
+        }
+        if (l.region == Samples) img.samples.assign(0x800000, 0); // the SCSP's sample ROM
+    }
     for (const Load &l : std::span(set.loads, set.count)) {
         const std::vector<uint8_t> data = z->read(l.file); // CRC against the archive's own
         if (data.size() != l.size || crc32(data.data(), data.size()) != l.crc)
@@ -155,11 +198,14 @@ M2Board::Images import_rom_set(const std::string &zip_path) {
         case Textures: r = &img.textures; break;
         case CoproTables: r = &img.copro_tables; break;
         case SoundProgram: // 68000, big-endian: the files hold byte-swapped words
+        case Samples: {
+            std::vector<uint8_t> &dst = l.region == Samples ? img.samples : img.sound_program;
             for (uint32_t i = 0; i < l.size; i += 2) {
-                img.sound_program[l.offset + i] = data[i + 1];
-                img.sound_program[l.offset + i + 1] = data[i];
+                dst[l.offset + i] = data[i + 1];
+                dst[l.offset + i + 1] = data[i];
             }
             continue;
+        }
         case Pcm1: std::copy(data.begin(), data.end(), img.pcm1.begin() + l.offset); continue;
         case Pcm2: std::copy(data.begin(), data.end(), img.pcm2.begin() + l.offset); continue;
         }
@@ -168,7 +214,7 @@ M2Board::Images import_rom_set(const std::string &zip_path) {
             (*r)[l.offset + w * 4 + 1] = data[w * 2 + 1];
         }
     }
-    for (uint32_t dst = set.mirror_from + 0x100000; dst <= 0xF00000; dst += 0x100000) // ROM_COPY mirrors
+    for (uint32_t dst = set.mirror_from + 0x100000; set.mirror_from && dst <= 0xF00000; dst += 0x100000) // ROM_COPY mirrors
         std::copy_n(img.main_data.begin() + set.mirror_from, 0x100000, img.main_data.begin() + dst);
     return img;
 }
@@ -177,9 +223,9 @@ const char *rom_set_name() { return M2_ROMSET; }
 
 std::vector<uint8_t> tgp_program(const M2Board::Images &img) {
     const Set &set = this_set();
-    const uint8_t *p = img.main_data.data() + set.tgp_offset;
-    if (crc32(p, kTgpWords * 4) != kTgpCrc) throw ZipError("TGP program not where expected");
-    return {p, p + kTgpWords * 4};
+    const uint8_t *p = (set.tgp_region == Program ? img.program : img.main_data).data() + set.tgp_offset;
+    if (crc32(p, set.tgp_words * 4) != set.tgp_crc) throw ZipError("TGP program not where expected");
+    return {p, p + set.tgp_words * 4};
 }
 
 } // namespace rt

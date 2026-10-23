@@ -93,12 +93,21 @@ target_include_directories(trace PUBLIC src)
 # interrupts, memory; MAME's semantics, transplanted, BSD-3), replay bus and
 # lockstep. No instruction interpreter.
 # The ROM set the game is recompiled from: daytona93 (Daytona USA Deluxe '93,
-# the default) or daytona (Revision A, 1994). One set per build directory:
-# its generated code, seeds and saves are its own.
-set(M2_ROMSET daytona93 CACHE STRING "MAME ROM set to recompile: daytona93 or daytona")
-set_property(CACHE M2_ROMSET PROPERTY STRINGS daytona93 daytona)
-if(NOT M2_ROMSET MATCHES "^(daytona93|daytona)$")
-    message(FATAL_ERROR "M2_ROMSET must be daytona93 or daytona, not ${M2_ROMSET}")
+# the default), daytona (Revision A, 1994) or srallyc (Sega Rally
+# Championship, Revision C: imported, not yet run). One set per build
+# directory: its generated code, seeds and saves are its own.
+set(M2_ROMSET daytona93 CACHE STRING "MAME ROM set to recompile: daytona93, daytona or srallyc")
+set_property(CACHE M2_ROMSET PROPERTY STRINGS daytona93 daytona srallyc)
+if(NOT M2_ROMSET MATCHES "^(daytona93|daytona|srallyc)$")
+    message(FATAL_ERROR "M2_ROMSET must be daytona93, daytona or srallyc, not ${M2_ROMSET}")
+endif()
+# The board the set runs on, as MAME's driver classes name them: model2o (the
+# original Model 2, Daytona) or model2a (Model 2A-CRX, Sega Rally). Only
+# model2o's board is written so far (src/runtime/m2_board.cpp).
+if(M2_ROMSET STREQUAL "srallyc")
+    set(M2_BOARD model2a)
+else()
+    set(M2_BOARD model2o)
 endif()
 
 add_library(runtime STATIC
@@ -125,7 +134,7 @@ add_library(runtime STATIC
     src/runtime/comm_board.cpp
 )
 target_include_directories(runtime PUBLIC src)
-target_compile_definitions(runtime PUBLIC M2_ROMSET="${M2_ROMSET}")
+target_compile_definitions(runtime PUBLIC M2_ROMSET="${M2_ROMSET}" M2_BOARD="${M2_BOARD}")
 # 7z ROM sets: the 7-Zip LZMA SDK's decoder (public-domain files only),
 # fetched by scripts/setup.py into extern/lzma.
 set(LZMA_DIR ${CMAKE_SOURCE_DIR}/extern/lzma/C)
@@ -249,7 +258,9 @@ endif()
 set(GEN_DIR ${M2_GEN_ROOT}/${M2_ROMSET})
 set(TGP_GEN ${M2_GEN_ROOT}/${M2_ROMSET}_tgp/tgp_gen.cpp)
 set(SND_GEN ${M2_GEN_ROOT}/${M2_ROMSET}_snd/snd_gen.cpp)
-if(EXISTS ${GEN_DIR}/gen_table.cpp AND EXISTS ${TGP_GEN} AND EXISTS ${SND_GEN})
+if(NOT M2_BOARD STREQUAL "model2o")
+    message(STATUS "${M2_ROMSET}: the ${M2_BOARD} board is not written yet; building the tools only")
+elseif(EXISTS ${GEN_DIR}/gen_table.cpp AND EXISTS ${TGP_GEN} AND EXISTS ${SND_GEN})
     file(GLOB GEN_SOURCES ${GEN_DIR}/*.cpp)
     add_executable(m2native tools/m2native/main.cpp ${GEN_SOURCES} ${TGP_GEN} ${SND_GEN})
     target_link_libraries(m2native PRIVATE runtime)

@@ -85,7 +85,9 @@ class JobsAndRomListTests(unittest.TestCase):
 
     def test_manifest_matches_the_importer(self):
         sets = SETUP.rom_manifest()
-        self.assertEqual(sorted(sets), ["daytona", "daytona93"])
+        self.assertEqual(sorted(sets), ["daytona", "daytona93", "srallyc"])
+        self.assertEqual(len(sets["srallyc"]), 23)  # its own files, nothing from SHARED_LOADS
+        self.assertFalse(any(f[3] for f in sets["srallyc"]))
         for romset, program in (("daytona93", "epr-16530a.12"), ("daytona", "epr-16722a.12")):
             files = sets[romset]
             names = [f[0] for f in files]
@@ -107,7 +109,7 @@ class JobsAndRomListTests(unittest.TestCase):
                 z.writestr("daytona/" + files[1][0], b"in a folder, as macOS's Compress makes them")
             out = io.StringIO()
             with patch.object(SETUP, "ROOT", temp), patch.object(SETUP, "rom_manifest", return_value={
-                    "daytona93": [], "daytona": files}), contextlib.redirect_stdout(out):
+                    "daytona93": [], "daytona": files, "srallyc": []}), contextlib.redirect_stdout(out):
                 SETUP.list_roms()
         text = out.getvalue()
         self.assertIn("0 of 30 present and correct", text)

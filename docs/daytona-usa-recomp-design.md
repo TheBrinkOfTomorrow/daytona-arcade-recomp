@@ -447,3 +447,56 @@ The critical path is i960 parity, then TGP parity; rendering and polish can proc
 - [ ] PCB access: which board revision is available, and can the TGP FIFO be probed?
 - [ ] Refresh is 57.524 Hz per MAME (provisional; PCB unmeasured).
 - [x] Should frame pacing lock to host 60 Hz or run at native rate with VRR? Native rate by default, on the wall clock, on any display; locking to the display (60 frames/s on 60, 120, 240 Hz), smooth pacing on a 57.52 Hz display and VRR pacing are launcher settings, all off (`src/app/pacing.h`, issue #7).
+
+## Second game: Sega Rally Championship (srallyc, Model 2A-CRX)
+
+Started 2026-10-23 at M0. Everything here is from MAME `model2.cpp` at
+`dddd7368` (`model2a_state::srallyc`, `model2a_crx_mem`, `ROM_START(srallyc)`)
+and the importer; nothing is confirmed against a PCB.
+
+**Same as Daytona:** the i960KB at 25 MHz, one MB86234 TGP at 50 MHz with
+its program uploaded by the i960, the CPU board's TGP tables
+(`opr-14742a/14743a`), `model2_base_mem` and `model2_tgp_mem` (geometrizer,
+buffer RAM, tilemaps, palette, texture and luma RAM), `model2_timers`, the
+SJ25-0207-01 drive board (its own program, `epr-17891`), the M2COMM link
+board (`epr-16726`). No protection: srallyc is not a `model2a_5881` set.
+
+**Different:**
+
+| | Daytona (`model2o`) | Sega Rally (`model2a`) |
+| --- | --- | --- |
+| i960 program | 2 x 128 KB | 2 x 512 KB (`epr-17888c/17889c`) |
+| 0x00200000 | 128 KB RAM, then a program ROM mirror | 256 KB RAM |
+| 0x01c00000 | MB8421 to the Model 1 I/O board's Z80 | Sega 315-5649 I/O; 93C46 EEPROM on its port A |
+| Sound | Model 1 sound board: 68000, YM3438, 2 MultiPCM | 68000 at 11.29 MHz and one SCSP at 22.58 MHz, 8 MB of samples |
+| main_data | ROM_COPY mirrors from 0x900000 / 0x800000 | none; data up to 0xc00000 |
+| Model ROM | 16 MB region | 32 MB region, 8 MB loaded |
+| TGP program | main_data 0x860020 / 0x800020, 2,024 words | i960 program ROM 0x05ae94, 1,666 words (provisional) |
+| MAME | working | `MACHINE_NOT_WORKING`: enemy car placement slightly off, possibly i960 wait states |
+
+**TGP program (provisional):** found by searching the images for Daytona's
+opening TGP jump table (`100060bf 060060bf 060060bf 060060bf`): none in
+main_data, one copy at 0x05ae94 in the program ROM. Its length assumes
+Daytona's convention that the last word holds its own index (Daytona's word
+2,023 is 0x7e7; Sega Rally's word 1,665 is 0x681). CRC 0x5c529c56. To be
+confirmed against MAME's upload (`geo_prg_w` / copro boot writes) before M2.
+
+**Consequences for the design:**
+
+- A board type beside the set: CMake's `M2_BOARD` (`model2o` or `model2a`).
+  Until the 2A-CRX board exists the srallyc build makes the tools only, and
+  `recompile.py --set srallyc` imports and stops.
+- MAME is still the lockstep oracle for i960 and TGP parity, but its
+  placement bug means a full-race match is not proof of correctness here:
+  the PCB, or the MiSTer core's 2A-CRX work, settles it.
+- A native SCSP is new code. MAME's `scsp.cpp` licence must be checked before
+  anything is lifted; Supermodel's SCSP is GPL, reference only.
+- Daytona's native audio and enhancements (widescreen scenery, HUD layout)
+  stay Daytona-only.
+- The 68000 recompiler assumes no indirect jumps (true for Daytona's
+  program); Sega Rally's sound program must be checked.
+
+**Next (M0, then M1):** confirm the TGP upload in MAME; record srallyc traces
+with the `m2trace` plugin; the 2A-CRX memory map and 315-5649 in
+`m2_board`; seeds for the i960 program; boot to attract in lockstep with
+sound stubbed.
