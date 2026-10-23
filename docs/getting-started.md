@@ -55,7 +55,7 @@ named **exactly** after the set: `daytona93.zip` for Deluxe '93,
 
 Sega Rally Championship (Revision C, MAME's `srallyc`) can be there as well,
 as `srallyc.zip` or `srallyc.7z`: setup builds it as its own game,
-`build-srallyc/segarally` (playable, no sound yet). `setup.py --list-roms`
+`build-srallyc/segarally` (playable, with sound). `setup.py --list-roms`
 lists the 23 files it needs.
 
     daytona-arcade-recomp/

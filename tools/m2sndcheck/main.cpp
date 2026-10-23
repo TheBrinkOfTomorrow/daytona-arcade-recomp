@@ -6,12 +6,17 @@
 // logged device reads fed back and the interrupts applied at the logged
 // counts, and fails on the first device access, register or PC that differs.
 //
-//   m2sndcheck SOUND_PROGRAM.bin SNDLOG
+//   m2sndcheck SOUND_PROGRAM.bin SNDLOG [SAMPLES.bin]
+//
+// On the Model 2A board (Sega Rally) the SCSP's register accesses are
+// checked with their byte masks, and SAMPLES.bin is the sample ROM the
+// 68000 can read at 0x800000.
 //
 // Test-only: the log comes from a MAME run on the user's ROMs (git-ignored).
 
 #include "runtime/snd_gen_support.h"
 
+#include <algorithm>
 #include <cinttypes>
 #include <cstdio>
 #include <cstring>
@@ -27,6 +32,7 @@ struct Access {
     uint64_t idx;
     bool write;
     uint32_t addr, val;
+    uint32_t mask = 0; // SCSP accesses: the byte mask (0: not logged)
 };
 struct Snap {
     uint64_t idx;
@@ -43,11 +49,13 @@ public:
     Replay(std::vector<Access> acc, const snd::Sched &s) : acc_(std::move(acc)), s_(s) {}
     uint8_t read(uint32_t addr) override { return uint8_t(take(false, addr, 0)); }
     void write(uint32_t addr, uint16_t data) override { take(true, addr, data); }
+    uint16_t read16(uint32_t addr, uint16_t mask) override { return uint16_t(take(false, addr, 0, mask)); }
+    void write16(uint32_t addr, uint16_t data, uint16_t mask) override { take(true, addr, data, mask); }
     size_t done() const { return next_; }
     size_t total() const { return acc_.size(); }
 
 private:
-    uint32_t take(bool w, uint32_t addr, uint32_t data) {
+    uint32_t take(bool w, uint32_t addr, uint32_t data, uint32_t mask = 0) {
         char b[256];
         if (next_ >= acc_.size()) {
             std::snprintf(b, sizeof b, "extra %s %06x at instruction %" PRIu64 " (log has %zu accesses)", w ? "write" : "read", addr,
@@ -55,9 +63,9 @@ private:
             fail(b);
         }
         const Access &a = acc_[next_++];
-        if (a.write != w || a.addr != addr || a.idx != s_.count || (w && a.val != data)) {
-            std::snprintf(b, sizeof b, "access %zu: native %s %06x=%x at instruction %" PRIu64 ", MAME %s %06x=%x at %" PRIu64,
-                          next_ - 1, w ? "write" : "read", addr, data, s_.count, a.write ? "write" : "read", a.addr, a.val, a.idx);
+        if (a.write != w || a.addr != addr || a.idx != s_.count || (w && a.val != data) || (a.mask && a.mask != mask)) {
+            std::snprintf(b, sizeof b, "access %zu: native %s %06x=%x (mask %x) at instruction %" PRIu64 ", MAME %s %06x=%x (mask %x) at %" PRIu64,
+                          next_ - 1, w ? "write" : "read", addr, data, mask, s_.count, a.write ? "write" : "read", a.addr, a.val, a.mask, a.idx);
             fail(b);
         }
         return a.val;
@@ -76,11 +84,17 @@ std::vector<uint8_t> load(const std::string &path) {
 } // namespace
 
 int main(int argc, char **argv) {
-    if (argc != 3) {
-        std::fprintf(stderr, "usage: m2sndcheck SOUND_PROGRAM.bin SNDLOG\n");
+    if (argc != 3 && argc != 4) {
+        std::fprintf(stderr, "usage: m2sndcheck SOUND_PROGRAM.bin SNDLOG [SAMPLES.bin]\n");
         return 2;
     }
-    const std::vector<uint8_t> rom = load(argv[1]);
+    std::vector<uint8_t> rom = load(argv[1]), samples;
+    if (snd::kScspBoard) {
+        if (argc != 4) fail("the Model 2A board needs SAMPLES.bin");
+        samples = load(argv[3]);
+        rom.resize(0x80000);      // the program region, 512 KB
+        samples.resize(0x800000); // 0x800000-0xffffff
+    }
     std::ifstream log(argv[2]);
     if (!log) fail(std::string("cannot open ") + argv[2]);
 
@@ -95,6 +109,7 @@ int main(int argc, char **argv) {
             Access a{};
             a.write = line[0] == 'w';
             s >> std::dec >> a.idx >> std::hex >> a.addr >> a.val;
+            if (!(s >> a.mask)) a.mask = 0;
             acc.push_back(a);
         } else if (line[0] == 'i') {
             uint64_t n;
@@ -114,7 +129,9 @@ int main(int argc, char **argv) {
     snd::Sched s(c);
     Replay dev(std::move(acc), s);
     c.rom = rom.data();
+    c.samples = samples.data();
     c.dev = &dev;
+    if (snd::kScspBoard) std::copy(rom.begin(), rom.begin() + 16, c.ram.begin()); // MAME's reset_model2_scsp: the vectors
     c.reset();
     s.auto_irq = false;
 

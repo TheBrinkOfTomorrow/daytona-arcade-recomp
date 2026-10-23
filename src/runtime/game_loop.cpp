@@ -1,5 +1,6 @@
 #include "runtime/game_loop.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <iterator>
@@ -38,10 +39,12 @@ GameLoop::GameLoop(const std::string &dir, bool sound_enabled) : GameLoop([&] {
 }(), sound_enabled) {}
 
 GameLoop::GameLoop(M2Board::Images img, bool sound_enabled) {
-    // Model 2A's SCSP sound board is not written yet: no sound (the game
-    // only sends to it, through the UART).
-    if (kModel2a) sound_enabled = false;
-    if (sound_enabled && !img.sound_program.empty()) sound_ = std::make_unique<snd::SoundBoard>(img.sound_program, img.pcm1, img.pcm2);
+    if (sound_enabled && !img.sound_program.empty())
+#if M2_MODEL2A
+        sound_ = std::make_unique<snd::SoundBoard>(img.sound_program, img.samples);
+#else
+        sound_ = std::make_unique<snd::SoundBoard>(img.sound_program, img.pcm1, img.pcm2);
+#endif
     board_ = std::make_unique<M2Board>(std::move(img));
     cpu_ = std::make_unique<Cpu>(board_.get());
     ls_ = std::make_unique<Lockstep>(*cpu_);
@@ -52,6 +55,7 @@ GameLoop::GameLoop(M2Board::Images img, bool sound_enabled) {
 }
 
 void GameLoop::probe() {
+    if (kModel2a) board_->fire_timers();
     const bool idle = board_->in_idle_loop();
     if (in_vblank_) {
         if ((idle && ls_->count - vblank_start_ >= kProbe * 2) || ls_->count - vblank_start_ >= kVblankCap) {
@@ -71,7 +75,22 @@ void GameLoop::probe() {
         }
     } else {
         const uint64_t since = ls_->count - frame_start_;
+        if (kModel2a && idle && since >= kMinFrame && since < kFrameCap) {
+            // Waiting for the frame: board time moves on to the next timer
+            // the game has an interrupt for, if that comes first, and the
+            // game runs its handler (Sega Rally's 500 Hz timer 0 and the
+            // per-frame timer 2); else to the end of the frame.
+            const uint64_t due = board_->next_timer_due();
+            if (due < next_vblank_tick_) {
+                board_->skip_to(due);
+                board_->fire_timers();
+                ls_->add_callback(ls_->count + kProbe, [this] { probe(); });
+                return;
+            }
+            board_->skip_to(next_vblank_tick_);
+        }
         if ((idle && since >= kMinFrame) || since >= kFrameCap) {
+            if (kModel2a) next_vblank_tick_ = std::max(board_->now_ticks(), next_vblank_tick_) + kFrameTicks;
             board_->io().inputs = inputs_;
             {
                 auto sample = profiler_.measure(profiler_.frame.geometry);

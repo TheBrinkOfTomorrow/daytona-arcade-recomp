@@ -115,14 +115,14 @@ def main():
          os.path.join(tgp, "tgp_gen.cpp")] + (["--fast_inaccuracy"] if args.fast_inaccuracy else []))
 
     snd = os.path.join(build, "gen", args.set + "_snd")
+    snd_seeds = os.path.join("seeds", args.set + "_snd.txt")
     os.makedirs(snd, exist_ok=True)
     run([tool(build, args.config, "m2sndrecomp"), os.path.join(cache, "sound_program.bin"),
-         os.path.join(snd, "snd_gen.cpp")])
+         os.path.join(snd, "snd_gen.cpp")] + (["--model2a"] if args.set in MODEL2A_SETS else [])
+        + (["--seeds", snd_seeds] if os.path.exists(os.path.join(ROOT, snd_seeds)) else []))
 
     run(["cmake", "-S", ".", "-B", build])  # picks up the generated sources
     run(build_cmd + ["--parallel", str(args.jobs)])  # the game (daytona, m2run) and the check tools
-    if args.set in MODEL2A_SETS:
-        print(f"recompile: {args.set}'s board (Model 2A-CRX) is not written yet: m2native is built, the game is not")
 
 
 if __name__ == "__main__":

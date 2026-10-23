@@ -1,6 +1,9 @@
 // m2sndrecomp: the sound CPU's 68000 static recompiler (design doc, sound).
 //
-//   m2sndrecomp SOUND_PROGRAM.bin OUT.cpp [--seeds FILE]
+//   m2sndrecomp SOUND_PROGRAM.bin OUT.cpp [--seeds FILE] [--model2a]
+//
+// --model2a: the Model 2A-CRX sound board's map (MAME model2_snd): the
+// program at 0x600000, its vector table copied to RAM at 0 at reset.
 //
 // Decodes every instruction reachable from the 68000 vector table plus any
 // seed addresses (src/m68k/reach) and emits native C++, one block per
@@ -193,7 +196,12 @@ struct Emitter {
         case Op::Moveq: b.add("D[" + std::to_string(in.dst.reg) + "] = snd::logic<4>(c, " + hex(in.src.imm) + ");"); break;
         case Op::Lea: b.add("A[" + std::to_string(in.dst.reg) + "] = " + addr(b, in.src, 4) + ";"); break;
         case Op::Pea: { const std::string a = addr(b, in.src, 4); b.add("c.push32(" + a + ");"); break; }
-        case Op::Clr: { Operand dst = operand(b, in.dst, sz); b.add(dst.write("snd::logic<" + Z + ">(c, 0)")); break; }
+        case Op::Clr: { // the 68000 reads a memory operand before clearing it (MAME's core too; it matters on the SCSP)
+            Operand dst = operand(b, in.dst, sz);
+            if (in.dst.is_mem()) b.add("(void)" + dst.value() + ";");
+            b.add(dst.write("snd::logic<" + Z + ">(c, 0)"));
+            break;
+        }
         case Op::Tst: { Operand src = operand(b, in.src, sz); b.add("snd::logic<" + Z + ">(c, " + src.value() + ");"); break; }
         case Op::Not: unary("snd::logic<" + Z + ">(c, ~$)"); break;
         case Op::Neg: unary("snd::neg<" + Z + ">(c, $)"); break;
@@ -406,22 +414,32 @@ std::vector<uint8_t> load(const std::string &path) {
 
 int main(int argc, char **argv) {
     if (argc < 3) {
-        std::fprintf(stderr, "usage: m2sndrecomp SOUND_PROGRAM.bin OUT.cpp [--seeds FILE]\n");
+        std::fprintf(stderr, "usage: m2sndrecomp SOUND_PROGRAM.bin OUT.cpp [--seeds FILE] [--model2a]\n");
         return 2;
     }
     const std::vector<uint8_t> img = load(argv[1]);
     std::vector<uint32_t> seeds;
+    bool model2a = false;
     for (int i = 3; i < argc; ++i)
-        if (!std::strcmp(argv[i], "--seeds") && i + 1 < argc) {
+        if (!std::strcmp(argv[i], "--model2a")) model2a = true;
+        else if (!std::strcmp(argv[i], "--seeds") && i + 1 < argc) {
             std::ifstream f(argv[++i]);
             std::string l;
             while (std::getline(f, l))
                 if (!l.empty() && l[0] != '#') seeds.push_back(uint32_t(std::strtoul(l.c_str(), nullptr, 16)));
         }
 
-    // Sound board map: ROM at 0, its upper 128 KiB mirrored at 0x080000.
+    // Model 1 sound board map: ROM at 0, its upper 128 KiB mirrored at
+    // 0x080000. Model 2A: the program at 0x600000; the vector table (read at
+    // 0 from RAM) is the program's first 1 KiB, which its reset code copies.
     auto read = [&](uint32_t a) -> std::optional<uint16_t> {
         a &= 0xffffff;
+        if (model2a) {
+            if (a < 0x400) return uint16_t(img[a] << 8 | img[a + 1]);
+            if (a < 0x600000 || a >= 0x600000 + img.size() - 1) return std::nullopt;
+            a -= 0x600000;
+            return uint16_t(img[a] << 8 | img[a + 1]);
+        }
         if (a >= 0x80000 && a < 0xa0000) a -= 0x60000;
         if (a + 1 >= img.size() || a >= 0x40000) return std::nullopt;
         return uint16_t(img[a] << 8 | img[a + 1]);
@@ -471,5 +489,6 @@ int main(int argc, char **argv) {
     std::ofstream(argv[2]) << em.o.str();
     std::printf("m2sndrecomp: %zu instructions from %zu seeds -> %s, all native; %zu indirect sites\n", r.insns.size(),
                 all.size(), argv[2], r.indirect_sites.size());
+    for (uint32_t a : r.indirect_sites) std::printf("  indirect: %06x: %s\n", a, m68k::format_mame(r.insns.at(a)).c_str());
     return 0;
 }

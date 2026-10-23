@@ -180,9 +180,49 @@ void M2Board::map(uint32_t start, uint32_t end, Kind k, uint8_t *base, uint32_t 
 void M2Board::attach(Cpu &cpu, Lockstep &ls) {
     cpu_ = &cpu;
     ls_ = &ls;
+    if (kModel2a) io5649_.set_clock([this] { return now_ticks(); }); // the EEPROM's write time
 #ifdef M2_FAST_GEN
     cpu.work_ram = work_.data(); // plain RAM: nothing watches its writes (ram_written)
 #endif
+}
+
+// --- board time and the timers (Model 2A) -----------------------------------
+
+uint64_t M2Board::count_now() const {
+#ifdef M2_FAST_GEN
+    return ls_->now();
+#else
+    return ls_->count;
+#endif
+}
+
+uint64_t M2Board::now_ticks() const { return tick_base_ + ticks_for_instructions(count_now() - count_base_); }
+
+void M2Board::skip_to(uint64_t ticks) {
+    if (ticks <= now_ticks()) return;
+    tick_base_ = ticks;
+    count_base_ = count_now();
+}
+
+void M2Board::fire_timers() {
+    const uint64_t now = now_ticks();
+    for (int n = 0; n < 4; ++n) {
+        if (!timer_run_[n] || now < timer_due_[n]) continue;
+        timer_run_[n] = false;
+        timervals_[n] = 0xfffff;
+        const uint32_t line = 1u << (n + 2);
+        if (intena_ & line) {
+            intreq_ |= line;
+            irq_update();
+        }
+    }
+}
+
+uint64_t M2Board::next_timer_due() const {
+    uint64_t due = UINT64_MAX;
+    for (int n = 0; n < 4; ++n)
+        if (timer_run_[n] && (intena_ & (1u << (n + 2)))) due = std::min(due, timer_due_[n]);
+    return due;
 }
 
 // --- interrupts (MAME irq_update) --------------------------------------------
@@ -340,7 +380,12 @@ uint32_t M2Board::dev_read(uint32_t addr, uint32_t mask) {
         const uint32_t o = addr - 0x00980030;
         return uint32_t(id[o]) | uint32_t(id[o + 1]) << 8 | uint32_t(id[o + 2]) << 16 | uint32_t(id[o + 3]) << 24;
     }
-    if (addr >= 0x00f00000 && addr <= 0x00f0000f) return timervals_[(addr >> 2) & 3];
+    if (addr >= 0x00f00000 && addr <= 0x00f0000f) {
+        const uint32_t n = (addr >> 2) & 3;
+        if (kModel2a && timer_run_[n]) // MAME timers_r: the start value less the elapsed ticks
+            timervals_[n] = timer_orig_[n] - uint32_t(now_ticks() - timer_start_[n]);
+        return timervals_[n];
+    }
     if ((addr & ~0x10000u) == 0x01a04000) { // cn_r, fg_r
         if (comm_board_) // fg_r takes frames in: only when that lane is read
             return uint32_t(comm_board_->cn_r()) | ((mask & 0xff0000) ? uint32_t(comm_board_->fg_r()) << 16 : 0);
@@ -387,8 +432,15 @@ void M2Board::dev_write(uint32_t addr, uint32_t data, uint32_t mask) {
         // timers_w: count down at 25 MHz and raise request bit 2+n. Daytona
         // reloads timer 0 each frame and never enables its interrupt, so the
         // value is kept without a clock.
-        uint32_t &t = timervals_[(addr >> 2) & 3];
+        const uint32_t n = (addr >> 2) & 3;
+        uint32_t &t = timervals_[n];
         t = (t & ~mask) | (data & mask);
+        if (kModel2a) { // Sega Rally runs its game timing on timers 0 and 2
+            timer_orig_[n] = t;
+            timer_start_[n] = now_ticks();
+            timer_due_[n] = timer_start_[n] + t;
+            timer_run_[n] = true;
+        }
         return;
     }
     if ((addr & ~0x100000u) == 0x01040000) { if (mask & 0xffff) video_->xhout_w(uint16_t(data)); return; }

@@ -48,7 +48,7 @@ void Eeprom93c46::clk_write(bool state) {
 void Eeprom93c46::clk_rising() {
     switch (state_) {
     case WaitStart:
-        if (di_) {
+        if (di_ && ready()) {
             accum_ = bits_ = 0;
             state_ = WaitCommand;
         }
@@ -68,8 +68,11 @@ void Eeprom93c46::clk_rising() {
         shift_ = (shift_ << 1) | (di_ ? 1 : 0);
         if (++bits_ == kDataBits) {
             if (!locked_) {
-                if (command_ == Write) set_word(address_, uint16_t(shift_));
-                else for (uint32_t a = 0; a < 64; a++) set_word(a, uint16_t(shift_)); // WriteAll
+                if (command_ == Write) set_word(address_, uint16_t(shift_)), busy_for(1750);
+                else { // WriteAll: ANDed into the cells (ERASEALL comes first)
+                    for (uint32_t a = 0; a < 64; a++) set_word(a, uint16_t(word(a) & shift_));
+                    busy_for(8000);
+                }
             }
             state_ = locked_ ? InReset : WaitCompletion;
         }
@@ -102,11 +105,13 @@ void Eeprom93c46::execute_command() {
     case Erase:
         if (locked_) { state_ = InReset; break; }
         set_word(address_, 0xffff);
+        busy_for(1000);
         state_ = WaitCompletion;
         break;
     case EraseAll:
         if (locked_) { state_ = InReset; break; }
         for (uint32_t a = 0; a < 64; a++) set_word(a, 0xffff);
+        busy_for(8000);
         state_ = WaitCompletion;
         break;
     case Lock: locked_ = true; state_ = InReset; break;
@@ -115,9 +120,10 @@ void Eeprom93c46::execute_command() {
 }
 
 bool Eeprom93c46::do_read() const {
-    // MAME: READY (always, here) while waiting for a start bit; the shifter
-    // while reading; otherwise the tristated line reads 1
+    // MAME: READY/BUSY while waiting for a start bit; the shifter while
+    // reading; otherwise the tristated line reads 1
     if (state_ == Reading) return (shift_ & 0x80000000u) != 0;
+    if (state_ == WaitStart) return ready();
     return true;
 }
 

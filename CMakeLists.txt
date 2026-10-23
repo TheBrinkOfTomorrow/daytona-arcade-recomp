@@ -128,6 +128,8 @@ add_library(runtime STATIC
     src/runtime/snd_cpu.cpp
     src/runtime/multipcm.cpp
     src/runtime/sound_board.cpp
+    src/runtime/scsp.cpp
+    src/runtime/scsp_board.cpp
     src/runtime/native_sample_mixer.cpp
     src/runtime/native_sound_sequencer.cpp
     src/runtime/native_sound_engine.cpp
@@ -135,7 +137,12 @@ add_library(runtime STATIC
     src/runtime/comm_board.cpp
 )
 target_include_directories(runtime PUBLIC src)
-target_compile_definitions(runtime PUBLIC M2_ROMSET="${M2_ROMSET}" M2_BOARD="${M2_BOARD}")
+if(M2_BOARD STREQUAL "model2a")
+    set(M2_MODEL2A 1)
+else()
+    set(M2_MODEL2A 0)
+endif()
+target_compile_definitions(runtime PUBLIC M2_ROMSET="${M2_ROMSET}" M2_BOARD="${M2_BOARD}" M2_MODEL2A=${M2_MODEL2A})
 # 7z ROM sets: the 7-Zip LZMA SDK's decoder (public-domain files only),
 # fetched by scripts/setup.py into extern/lzma.
 set(LZMA_DIR ${CMAKE_SOURCE_DIR}/extern/lzma/C)

@@ -137,6 +137,9 @@ private:
     Inputs inputs_;
     bool in_vblank_ = false, frame_done_ = false;
     uint64_t frame_start_ = 0, vblank_start_ = 0, frames_ = 0;
+    // Model 2A: board time of the next vblank, in timer ticks (M2Board::now_ticks)
+    static constexpr uint64_t kFrameTicks = uint64_t(kTimerHz / kFrameHz + 0.5);
+    uint64_t next_vblank_tick_ = kFrameTicks;
 };
 
 } // namespace rt

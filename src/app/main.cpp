@@ -328,7 +328,7 @@ int main(int argc, char **argv) {
         link.reset();
         have_audio = false;
         native_fault = false;
-        native_active = cfg.native_audio && !rt::kModel2a; // Sega Rally: no sound board yet
+        native_active = cfg.native_audio && !rt::kModel2a; // the native engine is Daytona's sound board
         try {
             auto images = rt::import_rom_set(cfg.rom_path);
             if (native_active) {
@@ -340,7 +340,7 @@ int main(int argc, char **argv) {
                 native_audio.volume(cfg.volume);
                 native_audio.volumes(cfg.music_volume, cfg.effects_volume);
                 native_audio.mute(cfg.mute);
-            } else if (audio_initialized && !rt::kModel2a) {
+            } else if (audio_initialized) {
                 have_audio = audio.open(snd::SoundBoard::kYmClock / 144.0, snd::SoundBoard::kPcmClock / 224.0);
                 if (!have_audio) std::fprintf(stderr, "daytona: reference audio unavailable (%s)\n", SDL_GetError());
             }

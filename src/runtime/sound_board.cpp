@@ -1,5 +1,7 @@
 #include "runtime/sound_board.h"
 
+#if !M2_MODEL2A // Model 1 sound board (Model 2A: scsp_board.cpp)
+
 #include "runtime/native_sound_sequencer.h"
 
 #include <algorithm>
@@ -178,3 +180,5 @@ void SoundBoard::ymfm_set_timer(uint32_t tnum, int32_t duration_in_clocks) {
 }
 
 } // namespace snd
+
+#endif // !M2_MODEL2A

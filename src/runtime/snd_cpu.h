@@ -14,19 +14,33 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace snd {
 
-// Device side of the sound board's map: the UART, two MultiPCMs with their
-// bank registers and the YM3438. Addresses are the ones on the 68000 bus:
-// 8-bit devices sit on the odd byte (0xc20001, 0xd00001 ...), the 16-bit
-// registers (0xc40012, 0xc50000, 0xc70000) at their even address.
+// The board this build is for (CMake's M2_BOARD): Model 2A-CRX's sound
+// board (an SCSP) or the Model 1 sound board Daytona uses.
+#ifdef M2_BOARD
+inline constexpr bool kScspBoard = std::string_view(M2_BOARD) == "model2a";
+#else
+inline constexpr bool kScspBoard = false;
+#endif
+
+// Device side of the sound board's map. Model 1 board: the UART, two
+// MultiPCMs with their bank registers and the YM3438, at their addresses on
+// the 68000 bus: 8-bit devices sit on the odd byte (0xc20001, 0xd00001 ...),
+// the 16-bit registers (0xc40012, 0xc50000, 0xc70000) at their even address
+// (read, write). Model 2A board: the SCSP's 16-bit registers at 0x100000
+// and the sample bank register at 0x400000, at even addresses with the
+// access's byte mask (read16, write16).
 class Devices {
 public:
     virtual ~Devices() = default;
-    virtual uint8_t read(uint32_t addr) = 0;
-    virtual void write(uint32_t addr, uint16_t data) = 0;
+    virtual uint8_t read(uint32_t) { return 0; }
+    virtual void write(uint32_t, uint16_t) {}
+    virtual uint16_t read16(uint32_t, uint16_t) { return 0; }
+    virtual void write16(uint32_t, uint16_t, uint16_t) {}
 };
 
 struct Cpu68k {
@@ -37,8 +51,14 @@ struct Cpu68k {
     uint16_t sys = 0x2700;          // SR system byte: T, S, interrupt mask (flags in the variables above)
     int irq_line = 0;               // level asserted on IPL (autovectored)
 
-    std::vector<uint8_t> ram = std::vector<uint8_t>(0x10000, 0); // 0xf00000-0xf0ffff
-    const uint8_t *rom = nullptr;   // 0x000000-0x03ffff, big-endian bytes; 0x080000-0x09ffff mirrors 0x020000
+    // Model 1 board: work RAM 0xf00000-0xf0ffff; the program ROM at
+    // 0x000000-0x03ffff, its upper half mirrored at 0x080000-0x09ffff.
+    // Model 2A board: sound RAM (shared with the SCSP) at 0-0x7ffff; the
+    // program at 0x600000-0x67ffff (rom: 512 KB) and the sample ROMs at
+    // 0x800000-0xffffff (samples: 8 MB). All big-endian bytes.
+    std::vector<uint8_t> ram = std::vector<uint8_t>(kScspBoard ? 0x80000 : 0x10000, 0);
+    const uint8_t *rom = nullptr;
+    const uint8_t *samples = nullptr;
     Devices *dev = nullptr;
 
     // Reset: SSP and PC from the vector table, supervisor, mask 7.
@@ -55,6 +75,12 @@ struct Cpu68k {
     // Memory: 24-bit bus.
     uint8_t r8(uint32_t addr) {
         addr &= 0xffffff;
+        if constexpr (kScspBoard) {
+            if (addr < 0x80000) return ram[addr];
+            if (addr >= 0x800000) return samples[addr - 0x800000];
+            if (addr >= 0x600000 && addr < 0x680000) return rom[addr - 0x600000];
+            return dev_r8(addr);
+        }
         if (addr >= 0xf00000 && addr < 0xf10000) return ram[addr - 0xf00000];
         if (addr < 0x40000) return rom[addr];
         if (addr >= 0x80000 && addr < 0xa0000) return rom[addr - 0x60000];
@@ -63,6 +89,12 @@ struct Cpu68k {
     uint16_t r16(uint32_t addr) {
         addr &= 0xffffff;
         if (addr & 1) odd(addr);
+        if constexpr (kScspBoard) {
+            if (addr < 0x80000) return uint16_t(ram[addr] << 8 | ram[addr + 1]);
+            if (addr >= 0x800000) return uint16_t(samples[addr - 0x800000] << 8 | samples[addr - 0x800000 + 1]);
+            if (addr >= 0x600000 && addr < 0x680000) return uint16_t(rom[addr - 0x600000] << 8 | rom[addr - 0x600000 + 1]);
+            return dev_r16(addr);
+        }
         if (addr >= 0xf00000 && addr < 0xf10000) return uint16_t(ram[addr - 0xf00000] << 8 | ram[addr - 0xf00000 + 1]);
         if (addr < 0x40000) return uint16_t(rom[addr] << 8 | rom[addr + 1]);
         if (addr >= 0x80000 && addr < 0xa0000) return uint16_t(rom[addr - 0x60000] << 8 | rom[addr - 0x60000 + 1]);
@@ -71,12 +103,22 @@ struct Cpu68k {
     uint32_t r32(uint32_t addr) { return uint32_t(r16(addr)) << 16 | r16(addr + 2); }
     void w8(uint32_t addr, uint32_t val) {
         addr &= 0xffffff;
+        if constexpr (kScspBoard) {
+            if (addr < 0x80000) ram[addr] = uint8_t(val);
+            else dev_w(addr, uint16_t(addr & 1 ? (val & 0xff) : (val & 0xff) << 8), addr & 1 ? 0x00ff : 0xff00);
+            return;
+        }
         if (addr >= 0xf00000 && addr < 0xf10000) ram[addr - 0xf00000] = uint8_t(val);
         else dev_w(addr, uint16_t(addr & 1 ? (val & 0xff) : (val & 0xff) << 8), addr & 1 ? 0x00ff : 0xff00);
     }
     void w16(uint32_t addr, uint32_t val) {
         addr &= 0xffffff;
         if (addr & 1) odd(addr);
+        if constexpr (kScspBoard) {
+            if (addr < 0x80000) ram[addr] = uint8_t(val >> 8), ram[addr + 1] = uint8_t(val);
+            else dev_w(addr, uint16_t(val), 0xffff);
+            return;
+        }
         if (addr >= 0xf00000 && addr < 0xf10000) {
             ram[addr - 0xf00000] = uint8_t(val >> 8);
             ram[addr - 0xf00000 + 1] = uint8_t(val);

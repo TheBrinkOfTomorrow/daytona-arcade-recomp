@@ -626,8 +626,6 @@ Launcher::Result Launcher::draw(bool game_running, const Devices &devices) {
         }
         if (ImGui::BeginTabItem("Audio")) {
             ImGui::Spacing();
-            if (rt::kModel2a)
-                ImGui::TextDisabled("Sega Rally's sound board (SCSP) is not written yet: the game is silent for now.");
             auto percent = [&](const char *label, float &value) { // a 0..1 setting as 0-100%
                 ImGui::SetNextItemWidth(200);
                 int v = int(value * 100.0f + 0.5f);
@@ -639,16 +637,18 @@ Launcher::Result Launcher::draw(bool game_running, const Devices &devices) {
             percent("Volume", cfg_.volume);
             ImGui::SameLine();
             if (ImGui::Checkbox("Mute", &cfg_.mute)) cfg_.save();
-            ImGui::Spacing();
-            percent("Music", cfg_.music_volume);
-            percent("Effects", cfg_.effects_volume);
-            ImGui::TextDisabled("The balance between the music and everything else (the engine, skids, crashes).\n"
-                                "100%% and 100%% is the game as the arcade's sound board mixes it.");
+            if (!rt::kModel2a) { // Daytona's sound board: music and effects on separate chips' voices
+                ImGui::Spacing();
+                percent("Music", cfg_.music_volume);
+                percent("Effects", cfg_.effects_volume);
+                ImGui::TextDisabled("The balance between the music and everything else (the engine, skids, crashes).\n"
+                                    "100%% and 100%% is the game as the arcade's sound board mixes it.");
 
-            ImGui::Spacing();
-            ImGui::Separator();
-            if (ImGui::Checkbox("Native audio (Experimental, Reset Required)", &cfg_.native_audio)) cfg_.save();
-            ImGui::TextDisabled("Shared native sequencer/mixer; reference audio remains available for comparison.");
+                ImGui::Spacing();
+                ImGui::Separator();
+                if (ImGui::Checkbox("Native audio (Experimental, Reset Required)", &cfg_.native_audio)) cfg_.save();
+                ImGui::TextDisabled("Shared native sequencer/mixer; reference audio remains available for comparison.");
+            }
             ImGui::EndTabItem();
         }
 

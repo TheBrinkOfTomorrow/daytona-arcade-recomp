@@ -54,6 +54,12 @@ inline constexpr uint8_t kIn0Start = kModel2a ? 0x40 : 0x10;
 // The pedals' range: Daytona's ADC 0x20-0xe0, Sega Rally's 0x00-0xff.
 inline constexpr uint8_t kPedalMin = kModel2a ? 0x00 : 0x20, kPedalMax = kModel2a ? 0xff : 0xe0;
 
+// Board time without a cycle clock: MAME's i960 runs 11,381,000 of Sega
+// Rally's instructions a second (its 2 ms timer 0 period, 50,000 ticks of
+// the 25 MHz timer clock, is 22,762 instructions in MAME's run).
+inline constexpr uint64_t kI960Ips = 11381000, kTimerHz = 25000000;
+inline uint64_t ticks_for_instructions(uint64_t n) { return n * (kTimerHz / 1000) / (kI960Ips / 1000); }
+
 struct Inputs {
     uint8_t steer = 0x80, accel = kPedalMin, brake = kPedalMin; // ADC values (see kPedalMin)
     uint8_t in0 = 0xff, in1 = 0x8f, in2 = 0xff;       // switches, active low (MAME IN0/IN1/IN2 layout)
@@ -119,6 +125,17 @@ public:
     void vblank_end();         // screen_update
     bool in_idle_loop() const; // the game is waiting for vblank
     uint64_t frame() const { return frame_; }
+
+    // Board time (Model 2A: Sega Rally runs on the board's timers), in ticks
+    // of the 25 MHz timer clock: it advances with the i960's instructions
+    // (kI960Ips) and the runner moves it forward over the game's waits.
+    uint64_t now_ticks() const;
+    void skip_to(uint64_t ticks);
+    // MAME model2_timer_cb for each timer that has run out by now.
+    void fire_timers();
+    // When the next running timer whose interrupt is enabled runs out
+    // (UINT64_MAX: none).
+    uint64_t next_timer_due() const;
 
     Video &video() { return *video_; }
     // Widescreen (enhancement): pixels added to each side; 0 = the original screen.
@@ -209,6 +226,12 @@ private:
     uint32_t intreq_ = 0, intena_ = 0;
     int8_t lines_[4] = {-1, -1, -1, -1};
     uint32_t timervals_[4] = {0, 0, 0, 0};
+    // Model 2A timers (MAME timers_w/timers_r): start, length, running
+    uint64_t timer_start_[4] = {}, timer_due_[4] = {};
+    uint32_t timer_orig_[4] = {};
+    bool timer_run_[4] = {};
+    uint64_t tick_base_ = 0, count_base_ = 0;
+    uint64_t count_now() const;
     uint32_t videocontrol_ = 0, zclip_ = 0;
     bool render_mode_ = false, render_test_ = false, render_unk_ = false;
     uint8_t comm_cn_ = 0, comm_fg_ = 0;

@@ -1,5 +1,32 @@
 # Handoff
 
+## Sega Rally M4: sound (2026-10-23)
+
+`build-srallyc/segarally` plays Sega Rally with its sound board: the
+recompiled 68000 and MAME's SCSP, transplanted (BSD-3).
+
+- `src/runtime/scsp.{h,cpp}`: the SCSP. `scsp_board.{h,cpp}`: the 2A-CRX
+  sound board (`snd::SoundBoard` on model2a, the Model 1 board's
+  interface; SCSP stereo at 44.1 kHz from `take_fm()`).
+- `snd::Cpu68k`: MAME's `model2_snd` map on model2a (`kScspBoard`),
+  16-bit device access with byte masks (`Devices::read16/write16`).
+- `m2sndrecomp --model2a`; `seeds/srallyc_snd.txt` (four jump tables);
+  `clr` on memory reads first (Daytona's code unchanged). 3,055
+  instructions, all native.
+- MAME patch 0004 logs the SCSP accesses; `m2sndcheck ... SAMPLES.bin`:
+  60 s attract MATCH, 46,585,161 instructions, 56,852 interrupts.
+- `M2Board` (model2a): board timers with interrupts and board time in 25
+  MHz ticks; the game loop skips the frame wait to the next timer. The
+  game's sound commands come from timer interrupts: without them, 1 byte.
+- 93C46 write/erase times; `M2_NATIVE_IO=1 m2native` checks the I/O chip
+  and EEPROM natively in the lockstep (3,000 frames: identical but for the
+  busy reads' count).
+- Checks: 31 command bytes in 60 s of attract (MAME 31), per-second
+  loudness within a few percent of MAME's `-wavwrite`; race ~12,000 bytes;
+  21 of 21 tests on both boards; Daytona's 600-frame screen hash and sound
+  count unchanged.
+- App: Sega Rally's Audio tab has the volume only.
+
 ## Sega Rally M3: the game on the native board, no sound (2026-10-23)
 
 `build-srallyc/segarally` is the game in a window (the Daytona app, with

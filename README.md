@@ -35,7 +35,7 @@ In short:
    `roms/daytona.zip` (Revision A, 1994), or `.7z`. Each is built as its own
    game; other Daytona sets are rejected. Sega Rally Championship (MAME's
    `srallyc`, Revision C) builds too, from `roms/srallyc.zip` or `.7z`, as
-   `build-srallyc/segarally`: playable, no sound yet.
+   `build-srallyc/segarally`: playable, with sound.
 2. Run setup. Linux or macOS:
 
        ./setup.sh

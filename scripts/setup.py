@@ -381,7 +381,7 @@ def main():
 EXE = ".exe" if WINDOWS else ""
 # The ROM sets the game can be recompiled from: roms/<set>.zip or .7z.
 SETS = [("daytona93", "Daytona USA Deluxe '93 (daytona93)"), ("daytona", "Daytona USA Revision A, 1994 (daytona)"),
-        ("srallyc", "Sega Rally Championship Revision C (srallyc; no sound yet)")]
+        ("srallyc", "Sega Rally Championship Revision C (srallyc)")]
 
 BUILD_FAILED = """
 setup: your ROM set was accepted, but recompiling or building the game

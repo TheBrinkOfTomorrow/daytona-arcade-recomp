@@ -503,12 +503,13 @@ need a code region mapped from RAM addresses to ROM bytes.
 - MAME is still the lockstep oracle for i960 and TGP parity, but its
   placement bug means a full-race match is not proof of correctness here:
   the PCB, or the MiSTer core's 2A-CRX work, settles it.
-- A native SCSP is new code. MAME's `scsp.cpp` licence must be checked before
-  anything is lifted; Supermodel's SCSP is GPL, reference only.
+- The SCSP is MAME's `scsp.cpp`/`scspdsp.cpp` (BSD-3-Clause), transplanted
+  (M4); Supermodel's and Mednafen's are GPL, reference only.
 - Daytona's native audio and enhancements (widescreen scenery, HUD layout)
   stay Daytona-only.
-- The 68000 recompiler assumes no indirect jumps (true for Daytona's
-  program); Sega Rally's sound program must be checked.
+- The 68000 recompiler finds code from the vector table; Sega Rally's sound
+  program has four jump tables (`jmp (An)` after `lea (d,PC,Dn)`), seeded
+  in `seeds/srallyc_snd.txt` (M4).
 
 **MAME and the billboard:** `model2a` adds a Sega billboard device, whose
 ROM (`epr-18022.ic2`) is a separate device set, `segabill`: put
@@ -590,9 +591,50 @@ rankings; two coins, start, car select and a race with the accelerator
 down, 6,000 frames at about 150 frames/s headless. The game target is
 `segarally` in Sega Rally's build.
 
-**Next (M4): sound.** MAME's SCSP (`scsp.cpp`, `scspdsp.cpp`) is
-BSD-3-Clause, so it can be ported into the runtime as the TGP was;
-Supermodel's and Mednafen's are GPL, reference only. The sound 68000 is
-recompiled with `m2sndrecomp` once it knows the SCSP board's map (MAME
-`model2_snd`: RAM at 0, the SCSP at 0x100000, the program ROM at
-0x600000), and the UART's MIDI path both ways.
+**M4, sound (done):** the 2A-CRX sound board runs natively, as the Model
+1 board does for Daytona.
+
+- The SCSP (`src/runtime/scsp.{h,cpp}`) is MAME's `scsp.cpp` and
+  `scspdsp.cpp` transplanted (BSD-3-Clause): 32 slots, envelopes, LFOs, the
+  DSP and its ring buffer in sound RAM, DMA, timers A-C, the interrupt
+  levels (SCILV) and MIDI in. The framework is gone: the board renders it
+  to each register access, so writes land on the right sample. Not wired
+  on Model 2 and left out: the main-CPU interrupt and EXTS. The noise
+  source is a fixed pseudo-random sequence.
+- The board (`src/runtime/scsp_board.{h,cpp}`, `snd::SoundBoard` when
+  `M2_MODEL2A`) has MAME's `model2_snd` map in `snd::Cpu68k` (512 KB sound
+  RAM at 0 shared with the SCSP, registers at 0x100000, the program at
+  0x600000, 8 MB of samples at 0x800000; the bank register at 0x400000 is a
+  no-op for an 8 MB set) and the reset vectors copied to RAM. Time is 68000
+  instructions at 776,428 a second (46,585,675 in MAME's 60 s); command
+  bytes reach the SCSP's MIDI input one line-time (10 bits at 31.25 kbit/s)
+  apart, SCSP timers expire on that count. It has the Model 1 board's
+  interface: the SCSP's stereo at 44.1 kHz comes out of `take_fm()`.
+- `m2sndrecomp --model2a`: 3,055 instructions from the vectors and the
+  four jump tables (`seeds/srallyc_snd.txt`), all native. `clr` on memory
+  now reads first, as the 68000 and MAME do (it pops the SCSP's MIDI FIFO);
+  Daytona's generated code is unchanged.
+- Lockstep (`m2sndcheck SOUND_PROGRAM.bin SNDLOG SAMPLES.bin`, MAME patch
+  0004 logging the SCSP accesses with their byte masks): 60 s of attract,
+  46,585,161 instructions, 56,852 interrupts and every SCSP access
+  identical.
+- Sega Rally runs its game timing on the board's timers (MAME `timers_w`,
+  `model2_timer_cb`): timer 0 every 2 ms and timer 2 once a frame, whose
+  interrupts send the sound commands. Daytona never enables them. On
+  model2a `M2Board` keeps board time in 25 MHz ticks (the i960's
+  instructions at 11,381,000 a second, MAME's rate: timer 0's 50,000 ticks
+  are 22,762 instructions there), and the game loop moves it over the
+  game's wait for the frame to the next timer due, or to the frame's end.
+  Without them the game sent one byte to the sound board in a race.
+- The 93C46 now has MAME's write and erase times (1.75 ms a word): DO reads
+  busy until done. `M2_NATIVE_IO=1 m2native`: the I/O chip and EEPROM native
+  in the 3,000-frame lockstep, every read identical to MAME's except the
+  busy reads' count (time is estimated).
+- Checked: the game sends the same 31 bytes MAME does in 60 s of attract,
+  and the per-second loudness of `m2run --wav` follows MAME's `-wavwrite`
+  to within a few percent; a race sends about 12,000 bytes. The app plays
+  it (one volume; Daytona's music/effects split and native audio stay
+  Daytona-only).
+
+**Next:** linked play (Sega Rally Twin, the comm board), then a full-race
+comparison with MAME.

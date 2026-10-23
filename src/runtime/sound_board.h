@@ -11,6 +11,14 @@
 // board a video frame at a time and drains the rendered audio.
 #pragma once
 
+#if M2_MODEL2A
+// Model 2A-CRX: the SCSP board, with the same interface.
+#include "runtime/scsp_board.h"
+namespace snd {
+using SoundBoard = ScspBoard;
+}
+#else
+
 #include "runtime/multipcm.h"
 #include "runtime/snd_gen_support.h"
 
@@ -100,3 +108,5 @@ private:
 };
 
 } // namespace snd
+
+#endif // M2_MODEL2A
