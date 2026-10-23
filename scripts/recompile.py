@@ -7,8 +7,9 @@ program to native C++ and build them. Same steps on Linux, macOS and Windows.
 Needs the user's ROM set at roms/<set>.zip or roms/<set>.7z (git-ignored):
 daytona93 (Daytona USA Deluxe '93, the default) or daytona (Revision A,
 1994; give it its own build directory, e.g. --build-dir build-daytona).
-srallyc (Sega Rally Championship, Revision C, Model 2A-CRX) is only
-imported so far: its board and i960 seeds are not written yet.
+srallyc (Sega Rally Championship, Revision C, Model 2A-CRX) recompiles
+its i960 code for the lockstep check (m2native) only: its board is not
+written yet, so there is no game to run.
 Everything
 derived from it (images, generated C++) goes under the build directory,
 which is git-ignored: never commit it.
@@ -41,8 +42,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # failure to recompile or build (which exit 1, with the tool's own errors).
 ROM_REJECTED_EXIT = 3
 
-# Sets on the Model 2A-CRX board (CMake's M2_BOARD model2a): imported only, for now.
+# Sets on the Model 2A-CRX board (CMake's M2_BOARD model2a): m2native only, for now.
 MODEL2A_SETS = ("srallyc",)
+# The i960 code those sets run from a RAM copy of program ROM (source, RAM
+# address, bytes): the recompiler reads that code from the ROM.
+CODE_COPY = {"srallyc": ("0x1000", "0x5a0000", "0x60000")}
 
 
 def run(cmd, **kw):
@@ -86,10 +90,6 @@ def main():
         run(build_cmd + ["--target", "m2import"])
         if subprocess.run([tool(build, args.config, "m2import"), roms[0], cache], cwd=ROOT).returncode:
             sys.exit(ROM_REJECTED_EXIT)  # m2import printed which file is missing or wrong
-    if args.set in MODEL2A_SETS:
-        print(f"recompile: {args.set} imported to {os.path.relpath(cache, ROOT)}; its board (Model 2A-CRX) and "
-              "i960 seeds are not written yet, so the game is not recompiled")
-        return
     run(build_cmd + ["--parallel", str(args.jobs), "--target", "m2recomp", "m2tgprecomp", "m2sndrecomp"])
 
     gen = os.path.join(build, "gen", args.set)
@@ -102,6 +102,10 @@ def main():
     hooks = os.path.join("seeds", args.set + "_hooks.txt")
     if os.path.exists(os.path.join(ROOT, hooks)):
         recomp += ["--hooks", hooks]
+    if args.set in MODEL2A_SETS:
+        recomp += ["--model2a"]
+    if args.set in CODE_COPY:
+        recomp += ["--code-copy", *CODE_COPY[args.set]]
     if args.fast_inaccuracy:
         recomp += ["--fast_inaccuracy"]
     run(recomp)
@@ -117,6 +121,8 @@ def main():
 
     run(["cmake", "-S", ".", "-B", build])  # picks up the generated sources
     run(build_cmd + ["--parallel", str(args.jobs)])  # the game (daytona, m2run) and the check tools
+    if args.set in MODEL2A_SETS:
+        print(f"recompile: {args.set}'s board (Model 2A-CRX) is not written yet: m2native is built, the game is not")
 
 
 if __name__ == "__main__":

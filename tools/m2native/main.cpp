@@ -13,6 +13,7 @@
 #include "geocheck.h"
 
 #include <memory>
+#include <string_view>
 
 #include <chrono>
 #include <cinttypes>
@@ -23,6 +24,12 @@
 #include <vector>
 
 namespace {
+#ifdef M2_BOARD
+constexpr bool kModel2a = std::string_view(M2_BOARD) == "model2a";
+#else
+constexpr bool kModel2a = false;
+#endif
+
 std::vector<uint8_t> load(const std::string &path) {
     std::ifstream f(path, std::ios::binary);
     if (!f) throw std::runtime_error("cannot open " + path);
@@ -42,16 +49,17 @@ int main(int argc, char **argv) {
         rt::Cpu core(&bus);
         bus.attach(&core);
         // M2: the geometry ports, TGP and buffer RAM are native, not replayed.
+        // Model 2A-CRX (M1 so far): every device is replayed from the trace.
         rt::TgpBoard board(load(dir + "/copro_tables.bin"), load(dir + "/copro_data.bin"));
         rt::TgpBoardModel geo(board);
-        bus.set_model(&geo);
+        if (!kModel2a) bus.set_model(&geo);
         rt::Lockstep ls(core, argv[3]);
         core.reset();
         gen::Env env{core, ls};
         // M2: the geometrizer, checked at each vblank against MAME's GEO.log.
         std::unique_ptr<rt::Geo> geom;
         std::unique_ptr<GeoCheck> geocheck;
-        if (argc == 5) {
+        if (argc == 5 && !kModel2a) {
             geom = std::make_unique<rt::Geo>(load(dir + "/polygons.bin"), load(dir + "/textures.bin"), board.buffer_data());
             geocheck = std::make_unique<GeoCheck>(argv[4], *geom, board, bus, ls);
         }
@@ -75,7 +83,7 @@ int main(int argc, char **argv) {
                     " epochs, %" PRIu64 " device events, %d interrupts, identical to MAME; %.2f s (%.1f M instr/s)\n",
                     ls.count, gen::native_instructions(), bus.epochs_matched(), bus.events_matched(), ls.interrupts(), s,
                     double(ls.count) / s / 1e6);
-        std::printf("  TGP (recompiled, run on demand): %" PRIu64 " instructions, %" PRIu64
+        if (!kModel2a) std::printf("  TGP (recompiled, run on demand): %" PRIu64 " instructions, %" PRIu64
                     " output words identical to MAME\n"
                     "  measured (depends on relative timing): buffer RAM reads %" PRIu64 " differ of %" PRIu64
                     "; FIFO-status polls %" PRIu64 " differ of %" PRIu64 "; buffer RAM hash differs at %" PRIu64 " of %" PRIu64 " samples\n",

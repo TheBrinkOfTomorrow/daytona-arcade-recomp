@@ -447,11 +447,16 @@ int main(int argc, char **argv) {
         if (falls && (nx == r.insns.end() || nx->first != in.addr + in.length))
             em.line("{ c.pc = " + hex(in.addr + in.length) + "; goto dispatch; }");
     }
-    em.o << "}\n\nnamespace {\nconst uint32_t kAddrs[] = {\n";
-    for (uint32_t a : addrs) em.o << "    " << hex(a) << ",\n";
-    em.o << "};\n} // namespace\n\n"
-         << "bool has_code(uint32_t a) { return std::binary_search(std::begin(kAddrs), std::end(kAddrs), a); }\n\n"
-         << "uint64_t native_instructions() { return " << em.native << "ull; }\n\n} // namespace sndgen\n";
+    em.o << "}\n\n";
+    if (addrs.empty()) { // no code found (a sound map this tool does not know yet): an empty array is ill-formed
+        em.o << "bool has_code(uint32_t) { return false; }\n\n";
+    } else {
+        em.o << "namespace {\nconst uint32_t kAddrs[] = {\n";
+        for (uint32_t a : addrs) em.o << "    " << hex(a) << ",\n";
+        em.o << "};\n} // namespace\n\n"
+             << "bool has_code(uint32_t a) { return std::binary_search(std::begin(kAddrs), std::end(kAddrs), a); }\n\n";
+    }
+    em.o << "uint64_t native_instructions() { return " << em.native << "ull; }\n\n} // namespace sndgen\n";
 
     if (!em.missing.empty()) {
         std::fprintf(stderr, "m2sndrecomp: FAILED: %zu reachable instructions have no native template:\n", em.missing.size());

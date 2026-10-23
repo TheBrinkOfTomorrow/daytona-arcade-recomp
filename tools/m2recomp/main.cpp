@@ -1,6 +1,14 @@
 // m2recomp: the i960 static recompiler (design doc, i960 static recompiler).
 //
 //   m2recomp PROGRAM.bin OUTDIR [--seeds FILE]... [--hooks FILE] [--chunk N] [--fast_inaccuracy]
+//            [--model2a] [--code-copy SRC DST SIZE]
+//
+// --model2a: the Model 2A-CRX map, where 0x00200000-0x0023ffff is RAM, not
+// model2o's program ROM mirror at 0x00220000.
+// --code-copy: the game copies SIZE bytes of its program ROM from SRC to RAM
+// at DST at boot and runs them there (Sega Rally: 0x1000 0x5a0000 0x60000).
+// Code at DST is recompiled from the ROM bytes, so it is only correct while
+// the copy is unchanged; the lockstep's work RAM hash checks that.
 //
 // --hooks: "ADDRESS name" lines; the generated code calls rt::hook_<name>(c)
 // just before the instruction at ADDRESS (enhancements: see
@@ -187,6 +195,13 @@ struct Emitter {
         auto two = [&](const std::string &v) { // read both sources first, as MAME does
             body += "{ const uint32_t t1 = " + s1(in) + ", t2 = " + s2(in) + "; " + d + " = " + v + "; }";
         };
+        // Real dst/srcs, as MAME's rif helpers; w is the instruction word.
+        // A literal dst other than fp0-fp3 faults in MAME.
+        bool fp_bad = false;
+        auto fp = [&](const std::string &setter, const std::string &v) {
+            fp_bad = in.m3 && (in.word & 0x00e00000u);
+            body = "{ constexpr uint32_t w = " + hex(in.word) + "; gen::" + setter + "(c, w, " + v + "); }";
+        };
         const uint32_t tgt = in.target, tgt_masked = in.target & ~3u; // bxx/bxx_s mask the target, b/bal/call/bbc/bbs do not
 
         switch (in.fmt) {
@@ -336,7 +351,7 @@ struct Emitter {
                        d + " = rem; " + R(in.dst + 1) + " = quo; }";
                 break;
             }
-            case 0x674: if (in.m3) return unsupported(in);                  // cvtir: integer src1, real dst
+            case 0x674: if (in.m3) { fp("set_rif", "double(int32_t(" + s1(in) + "))"); break; } // cvtir: integer src1, real dst
                         set("gen::f2u(float(double(int32_t(" + s1(in) + "))))"); break;
             case 0x677: if (in.m2 || in.m3) return unsupported(in);         // scaler: integer src1, real src2/dst
                         set("gen::f2u(float(double(gen::u2f(" + R(in.src2) + ")) * std::pow(2.0, double(int32_t(" + s1(in) + ")))))"); break;
@@ -354,10 +369,24 @@ struct Emitter {
             case 0x749: two("uint32_t([](int32_t a, int32_t b) { int32_t r = a - (a / b) * b; "
                             "if ((b ^ a) < 0 && r != 0) r += b; return r; }(int32_t(t2), int32_t(t1)))"); break; // modi (sign of src1)
             case 0x74b: two("uint32_t(int32_t(t2) / int32_t(t1))"); break; // divi
-            case 0x78d: if (in.m1 || in.m2 || in.m3) return unsupported(in); // subr: reals in registers (MAME: double, then float)
+            case 0x78d: if (in.m1 || in.m2 || in.m3) { fp("set_rif", "gen::rif2(c, w) - gen::rif1(c, w)"); break; } // subr: reals in registers (MAME: double, then float)
                         set("gen::f2u(float(double(gen::u2f(" + R(in.src2) + ")) - double(gen::u2f(" + R(in.src1) + "))))"); break;
-            case 0x78f: if (in.m1 || in.m2 || in.m3) return unsupported(in); // addr
+            case 0x78f: if (in.m1 || in.m2 || in.m3) { fp("set_rif", "gen::rif2(c, w) + gen::rif1(c, w)"); break; } // addr
                         set("gen::f2u(float(double(gen::u2f(" + R(in.src2) + ")) + double(gen::u2f(" + R(in.src1) + "))))"); break;
+            case 0x78b: fp("set_rif", "gen::rif2(c, w) / gen::rif1(c, w)"); break;   // divr
+            case 0x78c: fp("set_rif", "gen::rif2(c, w) * gen::rif1(c, w)"); break;   // mulr
+            case 0x79b: fp("set_rifl", "gen::rifl2(c, w) / gen::rifl1(c, w)"); break; // divrl
+            case 0x79c: fp("set_rifl", "gen::rifl2(c, w) * gen::rifl1(c, w)"); break; // mulrl
+            case 0x79d: fp("set_rifl", "gen::rifl2(c, w) - gen::rifl1(c, w)"); break;   // subrl
+            case 0x79f: fp("set_rifl", "gen::rifl2(c, w) + gen::rifl1(c, w)"); break;   // addrl
+            case 0x6c9: fp("set_rif", "gen::rif1(c, w)"); break;                      // movr
+            case 0x6d9: fp("set_rifl", "gen::rifl1(c, w)"); break;                    // movrl
+            case 0x688: fp("set_rif", "std::sqrt(gen::rif1(c, w))"); break;     // sqrtr
+            case 0x68a: fp("set_rif", "std::logb(gen::rif1(c, w))"); break;     // logbnr
+            case 0x6c3: if (in.m3) return unsupported(in);                  // cvtzril: real src1, long integer dst
+                        body = "{ const uint64_t v = uint64_t(int64_t(gen::rif1(c, " + hex(in.word) + "))); " + d + " = uint32_t(v); " +
+                               R(in.dst + 1) + " = uint32_t(v >> 32); }"; break;
+            case 0x66d: body = "gen::flushreg(c);"; break;                 // flushreg
             default: return unsupported(in);
             }
             break;
@@ -365,6 +394,7 @@ struct Emitter {
         default: return unsupported(in);
         }
 
+        if (fp_bad) return unsupported(in);
         ++native;
         exits = !exit.empty();
         // --fast_inaccuracy: inside a block the IP is not stored; an instruction that
@@ -442,6 +472,8 @@ int main(int argc, char **argv) {
     const std::string out = argv[2];
     std::vector<uint32_t> seeds;
     size_t chunk = 1500;
+    bool model2a = false;
+    uint32_t copy_src = 0, copy_dst = 0, copy_size = 0;
     bool blocks = false, chain = false;
     for (int i = 3; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--seeds") && i + 1 < argc) {
@@ -451,6 +483,12 @@ int main(int argc, char **argv) {
             load_hooks(argv[++i]);
         } else if (!std::strcmp(argv[i], "--chunk") && i + 1 < argc) {
             chunk = std::strtoul(argv[++i], nullptr, 0);
+        } else if (!std::strcmp(argv[i], "--model2a")) {
+            model2a = true;
+        } else if (!std::strcmp(argv[i], "--code-copy") && i + 3 < argc) {
+            copy_src = uint32_t(std::strtoul(argv[++i], nullptr, 0));
+            copy_dst = uint32_t(std::strtoul(argv[++i], nullptr, 0));
+            copy_size = uint32_t(std::strtoul(argv[++i], nullptr, 0));
         } else if (!std::strcmp(argv[i], "--fast_inaccuracy")) {
             blocks = true; // 1. block bookkeeping
             chain = true;  // 2. direct chaining
@@ -461,10 +499,12 @@ int main(int argc, char **argv) {
     }
 
     // model2o: program ROM at 0, its upper 128 KiB mirrored at 0x00220000.
+    // model2a: no mirror. Either: the ROM copy in RAM, if the game makes one.
     auto read = [&](uint32_t a) -> std::optional<uint32_t> {
         uint64_t off;
         if (a < img.size()) off = a;
-        else if (a >= 0x220000 && a < 0x240000) off = a - 0x200000;
+        else if (!model2a && a >= 0x220000 && a < 0x240000) off = a - 0x200000;
+        else if (copy_size && a >= copy_dst && a - copy_dst < copy_size) off = copy_src + uint64_t(a - copy_dst);
         else return std::nullopt;
         if (off + 4 > img.size()) return std::nullopt;
         uint32_t v;

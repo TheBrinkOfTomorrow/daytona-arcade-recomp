@@ -497,7 +497,8 @@ need a code region mapped from RAM addresses to ROM bytes.
 
 - A board type beside the set: CMake's `M2_BOARD` (`model2o` or `model2a`).
   Until the 2A-CRX board exists the srallyc build makes the tools only, and
-  `recompile.py --set srallyc` imports and stops.
+  `recompile.py --set srallyc` recompiles the i960 code and builds
+  `m2native` (devices replayed from the trace); no game target yet.
 - MAME is still the lockstep oracle for i960 and TGP parity, but its
   placement bug means a full-race match is not proof of correctness here:
   the PCB, or the MiSTer core's 2A-CRX work, settles it.
@@ -514,6 +515,26 @@ ROM (`epr-18022.ic2`) is a separate device set, `segabill`: put
 srallyc. srallyc routes 315-5649 port E to the drive board, so the
 billboard is not connected to the game.
 
-**Next (M1):** the 2A-CRX memory map and 315-5649 in `m2_board`; RAM-mapped
-code in `reach` and `m2recomp`; seeds from the harvest; boot to attract in
-lockstep with sound stubbed.
+**M1, i960 parity (done):** 600 attract frames, 116,533,145 instructions,
+all native, identical to MAME (515 epochs, 21,798,141 device events, 5,474
+interrupts). What it took:
+
+- Replay bus: 256 KB of work RAM at 0x00200000 and no program ROM mirror
+  (`M2_BOARD` model2a); the end-of-epoch RAM check uses the regions the
+  trace recorded, not a fixed table.
+- `m2recomp --model2a --code-copy 0x1000 0x5a0000 0x60000`: reads of
+  0x5a0000-0x5fffff come from program ROM 0x1000 (the boot copy, never
+  changed after it). `seeds/srallyc.txt`: 95 harvested targets.
+- Real (FP) templates, MAME's host-double semantics as `cmpr`/`cvtri`
+  already were: `movr(l)`, `addr(l)`, `subr(l)`, `mulr(l)`, `divr(l)`,
+  `sqrtr`, `logbnr`, `cvtir` to fp0-fp3, `cvtzril`, and `flushreg`. Operand
+  helpers in `gen_support.h` follow MAME's `get_1_rif`/`set_rif` and their
+  long forms; a literal destination other than fp0-fp3 stays unsupported.
+  Daytona uses none of these (its output is unchanged).
+- The sound program is not recompiled yet: srallyc's 68000 runs from
+  0x600000 on the SCSP board, not Daytona's map, so `m2sndrecomp` finds no
+  code and emits an empty table.
+
+**Next (M2):** the TGP and geometrizer natively (the game uploads geometrizer
+code); then the 2A-CRX board in `m2_board` (315-5649 I/O, EEPROM) and the
+SCSP sound map.

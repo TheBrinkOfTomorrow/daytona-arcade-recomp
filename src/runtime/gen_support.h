@@ -50,6 +50,35 @@ inline void wram_w8(rt::Cpu &c, uint32_t o, uint8_t v) { c.work_ram[o] = v; }
 #endif
 inline float u2f(uint32_t u) { return compat::bit_cast<float>(u); }
 
+// Real operands, as MAME's get_1_rif / get_2_rif / set_rif and their long
+// forms. `op` is the instruction word, a constant in generated code, so the
+// mode tests fold away. A literal is fp0-fp3, 1.0 (0x16) or 0.0.
+// flushreg, as MAME: the cached frames go to memory, oldest first.
+inline void flushreg(rt::Cpu &c) {
+    if (c.m_rcache_pos > 4) c.m_rcache_pos = 4;
+    for (int f = 0; f < c.m_rcache_pos; ++f)
+        for (uint32_t i = 0; i < 0x10; ++i) c.bus->write_dword(c.m_rcache_frame_addr[f] + i * 4, c.m_rcache[f][i]);
+    c.m_rcache_pos = 0;
+}
+
+inline double rif_lit(const rt::Cpu &c, uint32_t idx) { return idx < 4 ? c.m_fp[idx] : idx == 0x16 ? 1.0 : 0.0; }
+inline double rif1(const rt::Cpu &c, uint32_t op) { return op & 0x800 ? rif_lit(c, op & 0x1f) : double(u2f(c.m_r[op & 0x1f])); }
+inline double rif2(const rt::Cpu &c, uint32_t op) { return op & 0x1000 ? rif_lit(c, (op >> 14) & 0x1f) : double(u2f(c.m_r[(op >> 14) & 0x1f])); }
+inline void set_rif(rt::Cpu &c, uint32_t op, double v) {
+    if (!(op & 0x2000)) c.m_r[(op >> 19) & 0x1f] = f2u(float(v));
+    else c.m_fp[(op >> 19) & 3] = v; // the recompiler rejects a literal other than fp0-fp3
+}
+inline double rifl_reg(const rt::Cpu &c, uint32_t n) { return rt::u2d(uint64_t(c.m_r[n]) | (uint64_t(c.m_r[n + 1]) << 32)); }
+inline double rifl1(const rt::Cpu &c, uint32_t op) { return op & 0x800 ? rif_lit(c, op & 0x1f) : rifl_reg(c, op & 0x1e); }
+inline double rifl2(const rt::Cpu &c, uint32_t op) { return op & 0x1000 ? rif_lit(c, (op >> 14) & 0x1f) : rifl_reg(c, (op >> 14) & 0x1e); }
+inline void set_rifl(rt::Cpu &c, uint32_t op, double v) {
+    if (!(op & 0x2000)) {
+        const uint64_t u = rt::d2u(v);
+        c.m_r[(op >> 19) & 0x1e] = uint32_t(u);
+        c.m_r[((op >> 19) & 0x1e) + 1] = uint32_t(u >> 32);
+    } else c.m_fp[(op >> 19) & 3] = v;
+}
+
 // Recompiled code entry points (generated): run from c.m_IP until it leaves
 // recompiled code or the lockstep run ends.
 bool has_code(uint32_t addr);   // generated

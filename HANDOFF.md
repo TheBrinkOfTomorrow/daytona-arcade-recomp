@@ -1,5 +1,23 @@
 # Handoff
 
+## Sega Rally M1: i960 parity, all native (2026-10-23)
+
+`m2native` on the 600-frame srallyc attract trace: MATCH, 116,533,145
+instructions, all native (4,257 recompiled from 95 seeds, 3 chunks), 515
+epochs, 21,798,141 device events, 5,474 interrupts; 1.6 s. Every device is
+replayed from the trace (no TGP model on model2a yet).
+
+- Replay bus: model2a work RAM (256 KB at 0x00200000, no ROM mirror);
+  sample RAM check from the trace's own regions. m2replay also matches.
+- m2recomp: `--model2a`, `--code-copy SRC DST SIZE` (srallyc runs from a
+  RAM copy of ROM 0x1000 at 0x5a0000), and real-number templates (movr(l),
+  add/sub/mul/divr(l), sqrtr, logbnr, cvtir to fp, cvtzril, flushreg).
+- m2sndrecomp: an empty result compiles (srallyc's 68000 map is not known
+  to it yet: vectors point at 0x600000).
+- CMake builds m2native (only) for model2a; recompile.py passes the
+  srallyc flags.
+- Daytona: no generated code uses the new templates; 21 of 21 tests pass.
+
 ## Sega Rally: TGP upload confirmed, first MAME traces (2026-10-23)
 
 Patched Model-2 MAME built on Linux (about 20 minutes, 4 cores). srallyc
