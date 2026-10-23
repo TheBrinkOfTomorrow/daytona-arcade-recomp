@@ -28,12 +28,19 @@ GameLoop::GameLoop(const std::string &dir, bool sound_enabled) : GameLoop([&] {
     img.polygons = load(dir + "/polygons.bin");
     img.textures = load(dir + "/textures.bin");
     img.sound_program = load(dir + "/sound_program.bin");
-    img.pcm1 = load(dir + "/pcm1.bin");
-    img.pcm2 = load(dir + "/pcm2.bin");
+    if (kModel2a) {
+        img.samples = load(dir + "/samples.bin");
+    } else {
+        img.pcm1 = load(dir + "/pcm1.bin");
+        img.pcm2 = load(dir + "/pcm2.bin");
+    }
     return img;
 }(), sound_enabled) {}
 
 GameLoop::GameLoop(M2Board::Images img, bool sound_enabled) {
+    // Model 2A's SCSP sound board is not written yet: no sound (the game
+    // only sends to it, through the UART).
+    if (kModel2a) sound_enabled = false;
     if (sound_enabled && !img.sound_program.empty()) sound_ = std::make_unique<snd::SoundBoard>(img.sound_program, img.pcm1, img.pcm2);
     board_ = std::make_unique<M2Board>(std::move(img));
     cpu_ = std::make_unique<Cpu>(board_.get());

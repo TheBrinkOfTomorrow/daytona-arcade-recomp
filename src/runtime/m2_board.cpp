@@ -61,19 +61,26 @@ M2Board::M2Board(Images images)
       chr_(0x80000), palette_(0x4000), xlat_(0xc000), luma_(0x20000), comm_(0x4000),
       chunks_(size_t(1) << 12), tgp_(img_.copro_tables, *img_.rom) {
     if (!img_.rom || !img_.texture_ram) throw Fatal("M2_DC_MEMORY: no ROM source or texture RAM");
+    if (kModel2a) throw Fatal("M2_DC_MEMORY: model2o only");
     img_.copro_tables = {}; // the TGP board keeps its own copy (as words)
     map_rom(0x00000000, 0x001fffff, RomRegion::Program, 0);
     map(0x00200000, 0x0021ffff, Ram, ram_.data());
     map_rom(0x00220000, 0x0023ffff, RomRegion::Program, 0x20000);
 #else
 M2Board::M2Board(Images images)
-    : img_(std::move(images)), ram_(0x20000), work_(0x100000), cpuctl_(0x1000), backup_(0x4000, 0xff), tile_(0x10000),
-      chr_(0x80000), palette_(0x4000), xlat_(0xc000), tex0_(0x200000), tex1_(0x200000), luma_(0x20000), fb_a_(0x80000),
-      fb_b_(0x80000), comm_(0x4000), pages_(size_t(1) << (32 - kPageBits)), tgp_(img_.copro_tables, img_.copro_data) {
-    // model2o memory map (MAME model2_base_mem, model2_tgp_mem, model2o_mem)
+    : img_(std::move(images)), ram_(kModel2a ? 0x40000 : 0x20000), work_(0x100000), cpuctl_(0x1000), backup_(0x4000, 0xff),
+      tile_(0x10000), chr_(0x80000), palette_(0x4000), xlat_(0xc000), tex0_(0x200000), tex1_(0x200000), luma_(0x20000),
+      fb_a_(0x80000), fb_b_(0x80000), comm_(0x4000), pages_(size_t(1) << (32 - kPageBits)),
+      tgp_(img_.copro_tables, img_.copro_data) {
+    // model2o memory map (MAME model2_base_mem, model2_tgp_mem, model2o_mem);
+    // model2a_crx_mem: 256 KB of RAM, no ROM mirror
     map(0x00000000, 0x001fffff, Rom, img_.program.data());
-    map(0x00200000, 0x0021ffff, Ram, ram_.data());
-    map(0x00220000, 0x0023ffff, Rom, img_.program.data() + 0x20000);
+    if (kModel2a) {
+        map(0x00200000, 0x0023ffff, Ram, ram_.data());
+    } else {
+        map(0x00200000, 0x0021ffff, Ram, ram_.data());
+        map(0x00220000, 0x0023ffff, Rom, img_.program.data() + 0x20000);
+    }
 #endif
     map(0x00500000, 0x005fffff, Ram, work_.data());
     map(0x00800000, 0x00807fff, Dev, nullptr, 0, false);
@@ -251,11 +258,15 @@ void M2Board::vblank_end() {
 }
 
 bool M2Board::in_idle_loop() const {
+    const uint32_t ip = cpu_->m_IP;
+    // Sega Rally: polls videoctl_r's frame bit until it changes (0x5a379c-
+    // 0x5a37b0, in the RAM copy of its code); MAME takes 99% of the vblank
+    // interrupts of a 3,000-frame attract run there.
+    if (kModel2a) return ip >= 0x005a379c && ip <= 0x005a37b3;
     // The game's wait-for-vblank loops (0x12b0: until the frame counter at
     // 0x00500000 changes; 0x12f0: until it reaches 2). MAME takes 99% of
     // vblank interrupts here; the rest land in CPU-bound code such as the
     // boot-time texture upload at 0x1388.
-    const uint32_t ip = cpu_->m_IP;
     return (ip >= 0x12b0 && ip <= 0x12bb) || (ip >= 0x12f0 && ip <= 0x12ff);
 }
 
@@ -335,7 +346,13 @@ uint32_t M2Board::dev_read(uint32_t addr, uint32_t mask) {
             return uint32_t(comm_board_->cn_r()) | ((mask & 0xff0000) ? uint32_t(comm_board_->fg_r()) << 16 : 0);
         return uint32_t(comm_cn_ | 0xfe) | uint32_t(comm_fg_) << 16;
     }
-    if (addr >= 0x01c00000 && addr <= 0x01c00fff) { // MB8421 through umask 0x00ff00ff
+    if (kModel2a && addr >= 0x01c00000 && addr <= 0x01c0001f) { // 315-5649 through umask 0x00ff00ff
+        const uint32_t i = ((addr & 0x1f) >> 2) * 2;
+        return ((mask & 0x000000ff) ? uint32_t(io5649_.read(i)) : 0) | ((mask & 0x00ff0000) ? uint32_t(io5649_.read(i + 1)) << 16 : 0);
+    }
+    if (kModel2a && addr == 0x01c80000) // i8251 status in lane 2: DSR, TxEMPTY, TxRDY (nothing is received)
+        return (mask & 0x00ff0000) ? uint32_t(0x84 | (uart_txrdy_ ? 1 : 0)) << 16 : 0;
+    if (!kModel2a && addr >= 0x01c00000 && addr <= 0x01c00fff) { // MB8421 through umask 0x00ff00ff
         const uint32_t i = ((addr & 0xfff) >> 2) * 2;
         return uint32_t(io_.read(i)) | uint32_t(io_.read(i + 1)) << 16;
     }
@@ -386,7 +403,15 @@ void M2Board::dev_write(uint32_t addr, uint32_t data, uint32_t mask) {
         if (mask & 0xff0000) comm_fg_ = uint8_t(data >> 16);
         return;
     }
-    if (addr >= 0x01c00000 && addr <= 0x01c00fff) {
+    if (kModel2a) {
+        if (addr >= 0x01c00000 && addr <= 0x01c0001f) {
+            const uint32_t i = ((addr & 0x1f) >> 2) * 2;
+            if (mask & 0x000000ff) io5649_.write(i, uint8_t(data));
+            if (mask & 0x00ff0000) io5649_.write(i + 1, uint8_t(data >> 16));
+            return;
+        }
+        if (addr >= 0x01c00020 && addr <= 0x01c00fff) return; // 0x01c00040: nopw
+    } else if (addr >= 0x01c00000 && addr <= 0x01c00fff) {
         const uint32_t i = ((addr & 0xfff) >> 2) * 2;
         if (mask & 0x000000ff) io_.write(i, uint8_t(data));
         if (mask & 0x00ff0000) io_.write(i + 1, uint8_t(data >> 16));

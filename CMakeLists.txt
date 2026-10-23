@@ -102,8 +102,8 @@ if(NOT M2_ROMSET MATCHES "^(daytona93|daytona|srallyc)$")
     message(FATAL_ERROR "M2_ROMSET must be daytona93, daytona or srallyc, not ${M2_ROMSET}")
 endif()
 # The board the set runs on, as MAME's driver classes name them: model2o (the
-# original Model 2, Daytona) or model2a (Model 2A-CRX, Sega Rally). Only
-# model2o's board is written so far (src/runtime/m2_board.cpp).
+# original Model 2, Daytona) or model2a (Model 2A-CRX, Sega Rally), both in
+# src/runtime/m2_board.cpp. Sega Rally's build names its game segarally.
 if(M2_ROMSET STREQUAL "srallyc")
     set(M2_BOARD model2a)
 else()
@@ -114,6 +114,7 @@ add_library(runtime STATIC
     src/runtime/cpu.cpp
     src/runtime/tgp.cpp
     src/runtime/m2_tgp_board.cpp
+    src/runtime/io_315_5649.cpp
     src/runtime/geo.cpp
     src/runtime/raster.cpp
     src/runtime/video.cpp
@@ -258,19 +259,7 @@ endif()
 set(GEN_DIR ${M2_GEN_ROOT}/${M2_ROMSET})
 set(TGP_GEN ${M2_GEN_ROOT}/${M2_ROMSET}_tgp/tgp_gen.cpp)
 set(SND_GEN ${M2_GEN_ROOT}/${M2_ROMSET}_snd/snd_gen.cpp)
-if(NOT M2_BOARD STREQUAL "model2o")
-    # M1 on a board not written yet: the i960 lockstep harness only, with
-    # every device replayed from the trace.
-    if(EXISTS ${GEN_DIR}/gen_table.cpp AND EXISTS ${TGP_GEN} AND EXISTS ${SND_GEN})
-        file(GLOB GEN_SOURCES ${GEN_DIR}/*.cpp)
-        add_executable(m2native tools/m2native/main.cpp ${GEN_SOURCES} ${TGP_GEN} ${SND_GEN})
-        target_link_libraries(m2native PRIVATE runtime)
-        if(NOT MSVC)
-            set_source_files_properties(${GEN_SOURCES} ${TGP_GEN} ${SND_GEN} PROPERTIES COMPILE_OPTIONS "-Wno-unused-label")
-        endif()
-    endif()
-    message(STATUS "${M2_ROMSET}: the ${M2_BOARD} board is not written yet; building the tools and m2native only")
-elseif(EXISTS ${GEN_DIR}/gen_table.cpp AND EXISTS ${TGP_GEN} AND EXISTS ${SND_GEN})
+if(EXISTS ${GEN_DIR}/gen_table.cpp AND EXISTS ${TGP_GEN} AND EXISTS ${SND_GEN})
     file(GLOB GEN_SOURCES ${GEN_DIR}/*.cpp)
     add_executable(m2native tools/m2native/main.cpp ${GEN_SOURCES} ${TGP_GEN} ${SND_GEN})
     target_link_libraries(m2native PRIVATE runtime)
@@ -303,6 +292,9 @@ elseif(EXISTS ${GEN_DIR}/gen_table.cpp AND EXISTS ${TGP_GEN} AND EXISTS ${SND_GE
             add_executable(daytona WIN32 $<TARGET_OBJECTS:daytona_app> ${GEN_SOURCES} ${TGP_GEN} ${SND_GEN})
         endif()
         target_link_libraries(daytona PRIVATE runtime imgui gpurender ${M2_SDL_TARGET})
+        if(M2_BOARD STREQUAL "model2a" AND NOT ANDROID)
+            set_target_properties(daytona PROPERTIES OUTPUT_NAME segarally) # Sega Rally's build
+        endif()
         if(WIN32)
             target_link_libraries(daytona PRIVATE ws2_32) # link play's sockets
         endif()

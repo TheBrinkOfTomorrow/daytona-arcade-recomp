@@ -5,6 +5,10 @@
 // vblank: the geometrizer parses the display list, the vblank interrupt is
 // raised, and at vblank end the screen is composed.
 //
+// The board is the one M2_BOARD names: model2o (Daytona) or model2a (Model
+// 2A-CRX, Sega Rally: 256 KB of RAM at 0x00200000, the 315-5649 I/O chip and
+// its EEPROM at 0x01c00000 in place of the I/O board's dual-port RAM).
+//
 // Devices, each native: RAM/ROM and texture RAM (as the replay bus), the TGP
 // and geometry ports (TgpBoard, recompiled TGP), the geometrizer (Geo), the
 // screen (Video: tilemaps, palette, 3D layer), the interrupt controller and
@@ -25,16 +29,35 @@
 #include <deque>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "runtime/comm_board.h"
+#include "runtime/io_315_5649.h"
 
 namespace rt {
 
+// The board this build is for (CMake's M2_BOARD).
+#ifdef M2_BOARD
+inline constexpr bool kModel2a = std::string_view(M2_BOARD) == "model2a";
+#else
+inline constexpr bool kModel2a = false;
+#endif
+
+// The game this build runs, for window titles and messages.
+inline constexpr const char *kGameTitle = kModel2a ? "Sega Rally Championship" : "Daytona USA";
+
+// IN0's start button: Daytona's I/O board has it at bit 4, Sega Rally's
+// IN0 at bit 6 (MAME's srallyc ports; bit 5 is VR on both).
+inline constexpr uint8_t kIn0Start = kModel2a ? 0x40 : 0x10;
+// The pedals' range: Daytona's ADC 0x20-0xe0, Sega Rally's 0x00-0xff.
+inline constexpr uint8_t kPedalMin = kModel2a ? 0x00 : 0x20, kPedalMax = kModel2a ? 0xff : 0xe0;
+
 struct Inputs {
-    uint8_t steer = 0x80, accel = 0x20, brake = 0x20; // ADC values, 0x20-0xe0
+    uint8_t steer = 0x80, accel = kPedalMin, brake = kPedalMin; // ADC values (see kPedalMin)
     uint8_t in0 = 0xff, in1 = 0x8f, in2 = 0xff;       // switches, active low (MAME IN0/IN1/IN2 layout)
+    uint8_t handbrake = 0;                            // Model 2A (Sega Rally): IN2 is the hand brake, 0 = off
 };
 
 // The I/O board's side of the MB8421 dual-port RAM (2 KB): the game writes a
@@ -176,6 +199,7 @@ private:
     std::unique_ptr<Geo> geo_;
     std::unique_ptr<Video> video_;
     IoBoard io_;
+    Io5649 io5649_{io_}; // model2a
     std::unique_ptr<CommBoard> comm_board_; // link play only
     Cpu *cpu_ = nullptr;
     int frame_skip_ = 0;

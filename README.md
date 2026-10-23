@@ -33,7 +33,9 @@ In short:
 1. Copy your ROM set into `roms/` in the project folder, named exactly after
    the set: `roms/daytona93.zip` (Daytona USA Deluxe '93) and/or
    `roms/daytona.zip` (Revision A, 1994), or `.7z`. Each is built as its own
-   game; other Daytona sets are rejected.
+   game; other Daytona sets are rejected. Sega Rally Championship (MAME's
+   `srallyc`, Revision C) builds too, from `roms/srallyc.zip` or `.7z`, as
+   `build-srallyc/segarally`: playable, no sound yet.
 2. Run setup. Linux or macOS:
 
        ./setup.sh

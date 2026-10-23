@@ -19,7 +19,13 @@ const struct {
 };
 } // namespace
 
-const char *action_name(Action a) { return kActions[a].name; }
+const char *action_name(Action a) {
+    // Sega Rally: one view button (VR) and the hand brake (MAME's srallyc ports)
+    if (rt::kModel2a && a == View1) return "View change";
+    if (rt::kModel2a && a == View2) return "Hand brake";
+    if (rt::kModel2a && (a == View3 || a == View4)) return "(unused)";
+    return kActions[a].name;
+}
 const char *action_key(Action a) { return kActions[a].key; }
 
 std::string PadInput::describe() const {
@@ -225,10 +231,12 @@ rt::Inputs Controls::sample(const bool *keys, const Devices &d) {
     steer = analog ? target : steer + std::clamp(target - steer, -0.12f, 0.12f);
     accel = value(Accelerate, keys, d);
     brake = value(Brake, keys, d);
-    // ADC ranges (MAME's daytona ports): steering 0x20-0xe0 centred on 0x80, pedals 0x20 (up) to 0xe0 (floored)
-    in.steer = uint8_t(std::lround(0x80 + std::clamp(steer, -1.f, 1.f) * 0x60));
-    in.accel = uint8_t(std::lround(0x20 + std::clamp(accel, 0.f, 1.f) * 0xc0));
-    in.brake = uint8_t(std::lround(0x20 + std::clamp(brake, 0.f, 1.f) * 0xc0));
+    // ADC ranges (MAME's daytona ports): steering 0x20-0xe0 centred on 0x80, pedals 0x20 (up) to 0xe0 (floored);
+    // srallyc's: steering 0x01-0xff, pedals 0x00-0xff (rt::kPedalMin/kPedalMax)
+    const float lock = rt::kModel2a ? 0x7f : 0x60;
+    in.steer = uint8_t(std::lround(0x80 + std::clamp(steer, -1.f, 1.f) * lock));
+    in.accel = uint8_t(std::lround(rt::kPedalMin + std::clamp(accel, 0.f, 1.f) * (rt::kPedalMax - rt::kPedalMin)));
+    in.brake = uint8_t(std::lround(rt::kPedalMin + std::clamp(brake, 0.f, 1.f) * (rt::kPedalMax - rt::kPedalMin)));
 
     // Gears: direct selection, or sequential shifts on the press
     for (int g = 0; g < 4; g++)
@@ -245,8 +253,12 @@ rt::Inputs Controls::sample(const bool *keys, const Devices &d) {
     low(in.in0, 0x01, Coin);
     low(in.in0, 0x04, Test);
     low(in.in0, 0x08, Service);
-    low(in.in0, 0x10, Start);
+    low(in.in0, rt::kIn0Start, Start);
     low(in.in0, 0x20, View1);
+    if (rt::kModel2a) { // IN2 is the hand brake (analogue, 0 = off)
+        in.handbrake = uint8_t(std::lround(std::clamp(value(View2, keys, d), 0.f, 1.f) * 0xff));
+        return in;
+    }
     low(in.in0, 0x40, View2);
     low(in.in0, 0x80, View3);
     low(in.in1, 0x01, View4);

@@ -45,7 +45,7 @@ struct Script {
             const char *name;
             int port; // 0: IN0, 1: IN1
             uint8_t bit;
-        } buttons[] = {{"coin", 0, 0x01}, {"test", 0, 0x04}, {"service", 0, 0x08}, {"start", 0, 0x10}, {"vr1", 0, 0x20},
+        } buttons[] = {{"coin", 0, 0x01}, {"test", 0, 0x04}, {"service", 0, 0x08}, {"start", 0, rt::kIn0Start}, {"vr1", 0, 0x20},
                        {"vr2", 0, 0x40},  {"vr3", 0, 0x80},  {"vr4", 1, 0x01}};
         static const uint8_t gearvalue[5] = {0, 2, 1, 6, 5}; // MAME daytona_gearbox_r
         for (const Line &l : lines) {

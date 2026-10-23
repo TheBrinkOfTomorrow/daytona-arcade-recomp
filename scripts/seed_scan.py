@@ -2,7 +2,7 @@
 """Find i960 entry points the MAME harvest never reached, by static analysis
 of the user's ROM set, and list them as seeds.
 
-  seed_scan.py [--set daytona93|daytona] [--build-dir build] [--config Release] [--append]
+  seed_scan.py [--set daytona93|daytona|srallyc] [--build-dir build] [--config Release] [--append]
 
 The game calls code it has only as a pointer: state machines store the next
 state's address (lda 0x2266f8,r5; st r5,0xc(r3)), jump tables are indexed
@@ -55,7 +55,7 @@ def words(data):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--set", default="daytona93", choices=["daytona93", "daytona"])
+    ap.add_argument("--set", default="daytona93", choices=["daytona93", "daytona", "srallyc"])
     ap.add_argument("--build-dir", default="build")
     ap.add_argument("--config", default="Release")
     ap.add_argument("--append", action="store_true", help="add the new seeds to seeds/<set>.txt")
@@ -71,7 +71,19 @@ def main():
     img = open(prog_path, "rb").read()
 
     # Program ROM at 0, its upper 128 KiB mirrored at 0x220000 (as m2recomp).
+    # srallyc (Model 2A-CRX): no mirror; its code runs from a RAM copy of ROM
+    # 0x1000-0x60fff at 0x5a0000 (recompile.py's CODE_COPY), and only the
+    # boot code below 0x1000 runs from ROM.
+    model2a = args.set == "srallyc"
+    recomp_flags = ["--model2a", "--code-copy", "0x1000", "0x5a0000", "0x60000"] if model2a else []
+
     def off(a):
+        if model2a:
+            if 0x800 <= a < 0x1000:
+                return a
+            if 0x5a0000 <= a < 0x600000:
+                return a - 0x5a0000 + 0x1000
+            return None
         if 0x800 <= a < len(img):
             return a
         if 0x220000 <= a < 0x240000:
@@ -124,7 +136,7 @@ def main():
             f.writelines("%08x\n" % a for a in seeds + found)
         gen = os.path.join(scratch, "gen")
         os.makedirs(gen)
-        r = subprocess.run([recomp, prog_path, gen, "--seeds", sf], capture_output=True, text=True)
+        r = subprocess.run([recomp, prog_path, gen, "--seeds", sf] + recomp_flags, capture_output=True, text=True)
         if r.returncode:
             sys.exit(r.stderr + "\nseed_scan: recompile failed in round %d" % rnd)
 

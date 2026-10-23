@@ -360,7 +360,8 @@ def main():
             sys.exit(ROM_REJECTED.format(set=romset))
         if r.returncode:
             sys.exit(BUILD_FAILED)
-        exe = next((p for p in (os.path.join(set_build, "daytona" + EXE), os.path.join(set_build, "Release", "daytona" + EXE))
+        name = "segarally" if romset == "srallyc" else "daytona"  # CMake's game target, by board
+        exe = next((p for p in (os.path.join(set_build, name + EXE), os.path.join(set_build, "Release", name + EXE))
                     if os.path.exists(p)), None)
         if exe:
             games.append((label, exe))
@@ -380,7 +381,7 @@ def main():
 EXE = ".exe" if WINDOWS else ""
 # The ROM sets the game can be recompiled from: roms/<set>.zip or .7z.
 SETS = [("daytona93", "Daytona USA Deluxe '93 (daytona93)"), ("daytona", "Daytona USA Revision A, 1994 (daytona)"),
-        ("srallyc", "Sega Rally Championship Revision C (srallyc; imported only, does not run yet)")]
+        ("srallyc", "Sega Rally Championship Revision C (srallyc; no sound yet)")]
 
 BUILD_FAILED = """
 setup: your ROM set was accepted, but recompiling or building the game

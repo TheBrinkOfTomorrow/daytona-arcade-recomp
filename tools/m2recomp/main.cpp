@@ -355,13 +355,15 @@ struct Emitter {
             }
             case 0x674: if (in.m3) { fp("set_rif", "double(int32_t(" + s1(in) + "))"); break; } // cvtir: integer src1, real dst
                         set("gen::f2u(float(double(int32_t(" + s1(in) + "))))"); break;
-            case 0x677: if (in.m2 || in.m3) return unsupported(in);         // scaler: integer src1, real src2/dst
+            case 0x677: if (in.m2 || in.m3) { fp("set_rif", "gen::rif2(c, w) * std::pow(2.0, double(int32_t(" + s1(in) + ")))"); break; } // scaler: integer src1, real src2/dst
                         set("gen::f2u(float(double(gen::u2f(" + R(in.src2) + ")) * std::pow(2.0, double(int32_t(" + s1(in) + ")))))"); break;
             case 0x685: if (in.m1 || in.m2) { body = "{ constexpr uint32_t w = " + hex(in.word) + "; AC = (AC & ~7u) | gen::cc_d(gen::rif1(c, w), gen::rif2(c, w)); }"; break; } // cmpr
                         body = "AC = (AC & ~7u) | gen::cc_d(double(gen::u2f(" + R(in.src1) + ")), double(gen::u2f(" + R(in.src2) + ")));"; break; // cmpr
-            case 0x6c0: if (in.m1) return unsupported(in);                  // cvtri: real src1, integer dst
+            case 0x6c0: if (in.m3) return unsupported(in);                  // cvtri: real src1, integer dst
+                        if (in.m1) { body = "{ constexpr uint32_t w = " + hex(in.word) + "; " + d + " = uint32_t(int32_t(gen::round_to_int(gen::rif1(c, w), AC))); }"; break; }
                         set("uint32_t(int32_t(gen::round_to_int(double(gen::u2f(" + R(in.src1) + ")), AC)))"); break; // cvtri
-            case 0x6c2: if (in.m1) return unsupported(in);                  // cvtzri
+            case 0x6c2: if (in.m3) return unsupported(in);                  // cvtzri
+                        if (in.m1) { body = "{ constexpr uint32_t w = " + hex(in.word) + "; " + d + " = uint32_t(int32_t(gen::rif1(c, w))); }"; break; }
                         set("uint32_t(int32_t(double(gen::u2f(" + R(in.src1) + "))))"); break; // cvtzri
             case 0x701: two("t2 * t1"); break;                             // mulo
             case 0x708: two("t2 % t1"); break;                             // remo (MAME: undefined on 0)
@@ -392,6 +394,27 @@ struct Emitter {
             case 0x680: fp("set_rif", "std::atan2(gen::rif2(c, w), gen::rif1(c, w))"); break; // atanr
             case 0x683: fp("set_rif", "std::fmod(gen::rif2(c, w), gen::rif1(c, w))"); break;  // remr
             case 0x6e2: fp("set_rifl", "gen::rifl2(c, w) >= 0.0 ? std::fabs(gen::rifl1(c, w)) : -std::fabs(gen::rifl1(c, w))"); break; // cpysre
+            case 0x6c1: if (in.m3) return unsupported(in);                  // cvtril: real src1, long integer dst
+                        body = "{ constexpr uint32_t w = " + hex(in.word) + "; const uint64_t v = uint64_t(int64_t(gen::round_to_int(gen::rif1(c, w), AC))); " +
+                               d + " = uint32_t(v); " + R(in.dst + 1) + " = uint32_t(v >> 32); }"; break;
+            case 0x675: fp("set_rifl", "double(int32_t(" + s1(in) + "))"); break;                                     // cvtilr
+            case 0x676: fp("set_rifl", "gen::rifl2(c, w) * std::pow(2.0, double(int32_t(" + s1(in) + ")))"); break;   // scalerl
+            case 0x681: fp("set_rif", "gen::rif2(c, w) * std::log2(gen::rif1(c, w) + 1.0)"); break; // logepr
+            case 0x682: fp("set_rif", "gen::rif2(c, w) * std::log2(gen::rif1(c, w))"); break;       // logr
+            case 0x689: fp("set_rif", "std::pow(2.0, gen::rif1(c, w)) - 1.0"); break;               // expr
+            case 0x68b: fp("set_rif", "gen::round_to_int(gen::rif1(c, w), AC)"); break;             // roundr
+            case 0x68c: fp("set_rif", "std::sin(gen::rif1(c, w))"); break;                          // sinr
+            case 0x68d: fp("set_rif", "std::cos(gen::rif1(c, w))"); break;                          // cosr
+            case 0x68e: fp("set_rif", "std::tan(gen::rif1(c, w))"); break;                          // tanr
+            case 0x690: fp("set_rifl", "std::atan2(gen::rifl2(c, w), gen::rifl1(c, w))"); break;    // atanrl
+            case 0x692: fp("set_rifl", "gen::rifl2(c, w) * std::log2(gen::rifl1(c, w))"); break;    // logrl
+            case 0x698: fp("set_rifl", "std::sqrt(gen::rifl1(c, w))"); break;                       // sqrtrl
+            case 0x699: fp("set_rifl", "std::pow(2.0, gen::rifl1(c, w)) - 1.0"); break;             // exprl
+            case 0x69a: fp("set_rifl", "std::logb(gen::rifl1(c, w))"); break;                       // logbnrl
+            case 0x69b: fp("set_rifl", "gen::round_to_int(gen::rifl1(c, w), AC)"); break;           // roundrl
+            case 0x69c: fp("set_rifl", "std::sin(gen::rifl1(c, w))"); break;                        // sinrl
+            case 0x69d: fp("set_rifl", "std::cos(gen::rifl1(c, w))"); break;                        // cosrl
+            case 0x69e: fp("set_rifl", "std::tan(gen::rifl1(c, w))"); break;                        // tanrl
             case 0x66d: body = "gen::flushreg(c);"; break;                 // flushreg
             default: return unsupported(in);
             }

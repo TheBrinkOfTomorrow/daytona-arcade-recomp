@@ -240,7 +240,7 @@ Launcher::Result Launcher::draw(bool game_running, const Devices &devices) {
     }
 #endif
     ImGui::SetNextWindowBgAlpha(game_running ? 0.85f : 1.0f);
-    ImGui::Begin("Daytona USA", nullptr,
+    ImGui::Begin(rt::kGameTitle, nullptr,
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
     ImGui::PushTextWrapPos();
@@ -392,6 +392,7 @@ Launcher::Result Launcher::draw(bool game_running, const Devices &devices) {
             ImGui::TextDisabled("Hardware renderer: the 3D drawn at 2 to 4 times the original resolution, with\n"
                                 "sharper textures; the window shows it scaled to fit, which smooths the edges.");
 
+            if (!rt::kModel2a) { // Daytona's enhancements: Daytona only
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::TextUnformatted("Enhancements");
@@ -443,6 +444,7 @@ Launcher::Result Launcher::draw(bool game_running, const Devices &devices) {
                 ImGui::TextDisabled("Current allowance: %u. Scales with the wider view and respects draw distance.\n"
                                     "Resolution and super sampling do not change it.", automatic_budget);
             }
+            } // !kModel2a
 
             ImGui::Spacing();
             ImGui::Separator();
@@ -624,6 +626,8 @@ Launcher::Result Launcher::draw(bool game_running, const Devices &devices) {
         }
         if (ImGui::BeginTabItem("Audio")) {
             ImGui::Spacing();
+            if (rt::kModel2a)
+                ImGui::TextDisabled("Sega Rally's sound board (SCSP) is not written yet: the game is silent for now.");
             auto percent = [&](const char *label, float &value) { // a 0..1 setting as 0-100%
                 ImGui::SetNextItemWidth(200);
                 int v = int(value * 100.0f + 0.5f);

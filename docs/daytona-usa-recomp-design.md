@@ -554,6 +554,45 @@ output words, 2,341,426 polygons and 58,996,207 rasterizer words, 1,640 of
   out is never set; mirrored for lockstep).
 - Seeds: every `bx`/`callx`/`irq`/`iac` target in both harvests.
 
-**Next (M3):** the 2A-CRX board in `m2_board` (315-5649 I/O, EEPROM,
-work RAM map) and a game target, with SCSP sound stubbed; then the SCSP
-68000 map (vectors at 0x600000) and a native SCSP.
+**M3, the game on the native board (done, no sound):** `M2Board` serves
+both boards (`rt::kModel2a`, from `M2_BOARD`). On model2a:
+
+- 256 KB of RAM at 0x00200000, no ROM mirror.
+- The 315-5649 (`src/runtime/io_315_5649.cpp`, MAME's `315_5649.cpp`) at
+  0x01c00000 through umask 0x00ff00ff: port A drives the 93C46 EEPROM
+  (MAME's `eeprom_w`: bit 0 control mode, 5 DI, 6 CS, 7 CLK), port B is
+  IN0 (`in0_r`: in control mode bit 5 is the EEPROM's DO), C is IN1
+  (gears), D the hand brake, E the drive board's command (to the same
+  queue as Daytona's, so force feedback works), G the DIP switches;
+  analogue channels 0-2 are steering, accelerator and brake. The game's
+  traffic matches MAME's (`tracedev`): direction 0x4e, eight analogue reads
+  a frame.
+- The 93C46 (16-bit, 64 words) follows MAME's `eeprom_serial_93cxx`, with
+  writes completing at once; it is stored in `IoBoard::eeprom` (128 bytes),
+  which the app already saves.
+- The UART's status (lane 2 of 0x01c80000) reads DSR, TxEMPTY and TxRDY:
+  the game polls it before sending. Nothing comes back (no SCSP yet): in
+  MAME the game never received a byte in 3,000 frames either.
+- The wait-for-frame loop is 0x5a379c-0x5a37b0 (it polls `videoctl_r`'s
+  frame bit), where MAME takes 99% of the vblank interrupts.
+- Inputs: start is IN0 bit 6 (`kIn0Start`), pedals 0x00-0xff, steering
+  0x01-0xff. The app's View 1 is VR, View 2 the hand brake. Daytona's
+  enhancements (widescreen, draw distance, scenery budget) read Daytona's
+  data and are off and hidden for Sega Rally.
+- `scripts/seed_scan.py --set srallyc` (RAM-copy addresses) added 398
+  entry points: 45,307 instructions, all native, with the rest of MAME's
+  real-number instructions as templates (`cvtilr`, `scaler(l)`, `logepr`,
+  `logr(l)`, `expr(l)`, `roundr(l)`, `sin/cos/tanr(l)`, `atanrl`,
+  `sqrtrl`, `logbnrl`, `cvtril`, and `cvtri`/`cvtzri` from fp0-fp3).
+
+`m2run` on its own (no trace): warning screen, title, demo race and
+rankings; two coins, start, car select and a race with the accelerator
+down, 6,000 frames at about 150 frames/s headless. The game target is
+`segarally` in Sega Rally's build.
+
+**Next (M4): sound.** MAME's SCSP (`scsp.cpp`, `scspdsp.cpp`) is
+BSD-3-Clause, so it can be ported into the runtime as the TGP was;
+Supermodel's and Mednafen's are GPL, reference only. The sound 68000 is
+recompiled with `m2sndrecomp` once it knows the SCSP board's map (MAME
+`model2_snd`: RAM at 0, the SCSP at 0x100000, the program ROM at
+0x600000), and the UART's MIDI path both ways.

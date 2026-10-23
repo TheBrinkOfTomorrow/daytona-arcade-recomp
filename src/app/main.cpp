@@ -166,7 +166,7 @@ int fail(const char *what) {
     std::fprintf(stderr, "daytona: %s: %s\n", what, SDL_GetError());
 	SDL_ShowSimpleMessageBox(
 	SDL_MESSAGEBOX_ERROR,
-	"Daytona Error",
+	rt::kModel2a ? "Sega Rally Error" : "Daytona Error",
 	msg,
 	nullptr);
     return 1;
@@ -218,7 +218,7 @@ int main(int argc, char **argv) {
     }
 
     // the name graphics overlays and drivers see (patches/sdl3: Vulkan's application name)
-    SDL_SetAppMetadata("Daytona USA", nullptr, "daytona-recomp");
+    SDL_SetAppMetadata(rt::kGameTitle, nullptr, "daytona-recomp");
 #ifdef M2_MOBILE
     // Mobile shells are landscape-only and always occupy the display.
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
@@ -241,7 +241,7 @@ int main(int argc, char **argv) {
     constexpr int W = rt::GameLoop::kWidth, H = rt::GameLoop::kHeight;
     const int kMaxW = W + 2 * rt::GameLoop::wide_margin(app::Config::kMaxAspect);
     int screen_w = W; // this frame's width: W, or wider with widescreen
-    SDL_Window *window = SDL_CreateWindow("Daytona USA", W * 2, H * 2,
+    SDL_Window *window = SDL_CreateWindow(rt::kGameTitle, W * 2, H * 2,
                                           SDL_WINDOW_RESIZABLE | (cfg.fullscreen ? SDL_WINDOW_FULLSCREEN : 0));
     if (!window) return fail("SDL_CreateWindow");
     app::apply_fullscreen_mode(window, cfg.fullscreen_mode);
@@ -328,7 +328,7 @@ int main(int argc, char **argv) {
         link.reset();
         have_audio = false;
         native_fault = false;
-        native_active = cfg.native_audio;
+        native_active = cfg.native_audio && !rt::kModel2a; // Sega Rally: no sound board yet
         try {
             auto images = rt::import_rom_set(cfg.rom_path);
             if (native_active) {
@@ -340,7 +340,7 @@ int main(int argc, char **argv) {
                 native_audio.volume(cfg.volume);
                 native_audio.volumes(cfg.music_volume, cfg.effects_volume);
                 native_audio.mute(cfg.mute);
-            } else if (audio_initialized) {
+            } else if (audio_initialized && !rt::kModel2a) {
                 have_audio = audio.open(snd::SoundBoard::kYmClock / 144.0, snd::SoundBoard::kPcmClock / 224.0);
                 if (!have_audio) std::fprintf(stderr, "daytona: reference audio unavailable (%s)\n", SDL_GetError());
             }
@@ -512,13 +512,15 @@ int main(int argc, char **argv) {
             if (const uint64_t wait = pacer.wait_ns(SDL_GetTicksNS())) SDL_DelayPrecise(wait); // VRR: hold the frame
         const uint64_t now = SDL_GetTicksNS();
         if (game && !in_launcher) {
-            game->set_aspect(cfg.aspect_ratio()); // widescreen: no-op unless it changed
-            game->set_hud_edges(cfg.hud_edges);
             game->set_frame_skip(cfg.draw_mode);
             game->board().video().set_external_3d(cfg.renderer == "hardware" && gpu.ok(), true);
-            game->set_stretch_backdrop(cfg.stretch_backdrop);
-            rt::GameLoop::set_draw_distance(cfg.draw_distance);
-            game->set_draw_budget(cfg.draw_budget);
+            if (!rt::kModel2a) { // the enhancements read Daytona's own data: Daytona only
+                game->set_aspect(cfg.aspect_ratio()); // widescreen: no-op unless it changed
+                game->set_hud_edges(cfg.hud_edges);
+                game->set_stretch_backdrop(cfg.stretch_backdrop);
+                rt::GameLoop::set_draw_distance(cfg.draw_distance);
+                game->set_draw_budget(cfg.draw_budget);
+            }
             for (int frames = pacer.frames(now); frames > 0; --frames) {
                 rt::Inputs inputs = cfg.controls.sample(SDL_GetKeyboardState(nullptr), devices);
                 if (cfg.hold_test != test_hold.armed()) cfg.hold_test ? test_hold.arm() : test_hold.cancel();

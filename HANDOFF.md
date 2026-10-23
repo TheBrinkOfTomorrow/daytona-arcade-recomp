@@ -1,5 +1,24 @@
 # Handoff
 
+## Sega Rally M3: the game on the native board, no sound (2026-10-23)
+
+`build-srallyc/segarally` is the game in a window (the Daytona app, with
+Sega Rally's inputs and title; enhancements hidden; silent). `m2run`
+headless: attract (warning, title, demo race, rankings) and, scripted, two
+coins, start, car select and a race; 6,000 frames at about 150 frames/s.
+
+- `src/runtime/io_315_5649.{h,cpp}`: the 315-5649 and the 93C46 EEPROM
+  (MAME semantics); `M2Board` maps them, 256 KB of RAM, the UART status
+  and Sega Rally's wait-for-frame loop when `rt::kModel2a`.
+- `rt::kGameTitle`, `kIn0Start`, `kPedalMin/Max` (m2_board.h) for the app,
+  input scripts and tests; app_controls test follows the board's ranges.
+- seeds: `scripts/seed_scan.py --set srallyc` (398 more, 610 in all);
+  m2recomp: the rest of MAME's real-number instructions.
+- CMake builds every target for model2a (the game as `segarally`);
+  setup.py finds it.
+- Checks: both srallyc traces still MATCH in m2native; 21 of 21 tests on
+  both boards; Daytona's generated code has none of the new templates.
+
 ## Sega Rally M2: TGP and geometrizer native (2026-10-23)
 
 3,000-frame srallyc attract trace (MAME with `M2TRACE_IRQLOG`, `_TGPLOG`

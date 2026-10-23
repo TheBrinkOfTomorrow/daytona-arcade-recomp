@@ -53,6 +53,11 @@ Make a folder called `roms` inside the project and copy your set into it,
 named **exactly** after the set: `daytona93.zip` for Deluxe '93,
 `daytona.zip` for Revision A (or `.7z`). Both can be there.
 
+Sega Rally Championship (Revision C, MAME's `srallyc`) can be there as well,
+as `srallyc.zip` or `srallyc.7z`: setup builds it as its own game,
+`build-srallyc/segarally` (playable, no sound yet). `setup.py --list-roms`
+lists the 23 files it needs.
+
     daytona-arcade-recomp/
         roms/
             daytona93.zip

@@ -17,6 +17,9 @@
 #include <cstdlib>
 #include <string>
 
+// Full lock: Daytona's ADC 0x20-0xe0, Sega Rally's 0x01-0xff (app/controls.cpp).
+constexpr int kRight = rt::kModel2a ? 0xff : 0xe0, kLeft = rt::kModel2a ? 0x01 : 0x20;
+
 namespace {
 int failures = 0;
 void check(bool ok, const char *what) {
@@ -99,16 +102,16 @@ int main() {
 
     const bool *no_keys = nullptr;
     rt::Inputs in = c.sample(no_keys, devices);
-    check(in.steer == 0x80 && in.accel == 0x20 && in.brake == 0x20, "at rest: centred, pedals up");
+    check(in.steer == 0x80 && in.accel == rt::kPedalMin && in.brake == rt::kPedalMin, "at rest: centred, pedals up");
 
     SDL_SetJoystickVirtualAxis(wheel, 0, 8192); // full right lock, a quarter turn
     SDL_SetJoystickVirtualAxis(pedals, 0, -32768); // accelerator floored
     SDL_SetJoystickVirtualAxis(pedals, 1, 0);     // brake half way
     pump(devices);
     in = c.sample(no_keys, devices);
-    check(in.steer == 0xe0, "full right");
-    check(in.accel == 0xe0, "accelerator floored");
-    check(std::abs(int(in.brake) - 0x80) <= 1, "brake half way");
+    check(in.steer == kRight, "full right");
+    check(in.accel == rt::kPedalMax, "accelerator floored");
+    check(std::abs(int(in.brake) - (rt::kPedalMin + rt::kPedalMax) / 2) <= 1, "brake half way");
 
     SDL_SetJoystickVirtualAxis(wheel, 0, 4096);
     pump(devices);
@@ -126,13 +129,13 @@ int main() {
     check(c.sample(no_keys, devices).steer == 0x80, "sensitivity preserves centre");
     SDL_SetJoystickVirtualAxis(wheel, 0, 8192);
     pump(devices);
-    check(c.sample(no_keys, devices).steer == 0xe0, "sensitivity preserves full right lock");
+    check(c.sample(no_keys, devices).steer == kRight, "sensitivity preserves full right lock");
     c.wheel_sensitivity = 1.0f;
 
     SDL_SetJoystickVirtualAxis(wheel, 0, -32768); // past the bound lock: clamps
     pump(devices);
     in = c.sample(no_keys, devices);
-    check(in.steer == 0x20, "full left (clamped)");
+    check(in.steer == kLeft, "full left (clamped)");
 
     const int gear = c.gear;
     SDL_SetJoystickVirtualButton(wheel, 1, true);
@@ -240,7 +243,7 @@ int main() {
     pump(devices);
     check(devices.joys.size() == present + 1, "unplugged devices closed");
     in = c.sample(no_keys, devices);
-    check(in.accel == 0x20, "pedals gone: accelerator up");
+    check(in.accel == rt::kPedalMin, "pedals gone: accelerator up");
 
     devices.close_all();
     SDL_DetachVirtualJoystick(wheel_id);

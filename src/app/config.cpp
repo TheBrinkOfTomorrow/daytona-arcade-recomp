@@ -94,7 +94,7 @@ void Config::save() const {
 }
 
 void Config::write(std::ostream &f) const {
-    f << "# Daytona USA launcher settings\n";
+    f << "# " << rt::kGameTitle << " launcher settings\n";
     f << "rom=" << rom_path << "\n";
     f << "gpu=" << gpu << "\n";
     f << "renderer=" << renderer << "\n";
