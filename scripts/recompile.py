@@ -82,7 +82,7 @@ def main():
 
     build_cmd = ["cmake", "--build", build, "--config", args.config]
     # the build directory is for one ROM set (CMake's M2_ROMSET)
-    run(["cmake", "-S", ".", "-B", build, "-DM2_ROMSET=" + args.set])
+    run(["cmake", "-S", ".", "-B", build, "-DCMAKE_BUILD_TYPE=" + args.config, "-DM2_ROMSET=" + args.set])
     samples = "samples.bin" if args.set in MODEL2A_SETS else "pcm1.bin"  # SCSP or MultiPCM sound board
     if not all(os.path.exists(os.path.join(cache, f)) for f in ("tgp_program.bin", "sound_program.bin", samples)):
         if not roms:

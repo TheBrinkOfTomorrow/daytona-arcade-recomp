@@ -1,5 +1,13 @@
 # Handoff
 
+## Default to a Release build (2026-10-23)
+
+A build directory configured without a build type (`recompile.py` on a
+fresh directory, Makefiles on macOS) built unoptimised, and SoftFloat's
+inline helpers then failed to link (`softfloat_countLeadingZeros32`).
+CMake now defaults single-config builds to Release, and `recompile.py`
+passes `--config` as the build type.
+
 ## Sega Rally M4: sound (2026-10-23)
 
 `build-srallyc/segarally` plays Sega Rally with its sound board: the

@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(daytona_recomp LANGUAGES C CXX)
+# Single-config generators build unoptimised without a build type, and the
+# SoftFloat build below relies on its inline helpers being inlined.
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 if(IOS)
     enable_language(OBJCXX)
 endif()
