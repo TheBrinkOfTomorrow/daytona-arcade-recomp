@@ -4,7 +4,8 @@ same steps on Linux, macOS and Windows; run ./setup.sh (Linux, macOS) or
 setup.ps1 (Windows) first to install the toolchain, or run this directly if
 you already have one.
 
-  setup.py [--test-extras] [--with-mame] [--build-mame] [--no-build]
+  setup.py [--jobs N] [--test-extras] [--with-mame] [--build-mame] [--no-build]
+  setup.py --list-roms
 
 Always:
   - checks the toolchain: git, CMake >= 3.20, a C++20 compiler (Ninja used
@@ -19,6 +20,12 @@ Always:
     roms/daytona.zip (or .7z), in build-daytona/ (a separate build: each
     build directory is recompiled from one ROM set).
 Options:
+  --jobs N, -j N compile N files at once (default: one per CPU thread; the
+                 tests run as many at once too). Lower it if the machine runs
+                 out of memory compiling the game's code.
+  --list-roms    list every file each ROM set must contain (name, size, CRC32),
+                 and check roms/<set>.zip against it if it is there; builds
+                 nothing.
   --test-extras  pip packages and modules for the optional tests (lupa for the
                  Lua plugin tests, pypcode + the Ghidra i960 module for the
                  second decode oracle).
@@ -160,7 +167,7 @@ def cached(build, key):
     return None
 
 
-def configure_and_build(build, romset="daytona93"):
+def configure_and_build(build, romset="daytona93", jobs=None):
     say("Configuring and building" + ("" if romset == "daytona93" else f" ({romset})"))
     cmd = ["cmake", "-S", ".", "-B", build, "-DCMAKE_BUILD_TYPE=Release", "-DM2_ROMSET=" + romset]
     want = {}  # cache entries that must match, or the build directory is reconfigured
@@ -203,17 +210,97 @@ def configure_and_build(build, romset="daytona93"):
         run(cmd)
     else:
         run(["cmake", "-S", ".", "-B", build, "-DM2_ROMSET=" + romset])
-    run(["cmake", "--build", build, "--config", "Release", "--parallel"])
+    run(["cmake", "--build", build, "--config", "Release", "--parallel"] + ([str(jobs)] if jobs else []))
+
+
+def default_jobs():
+    return os.cpu_count() or 1
+
+
+ROM_IMPORT = os.path.join(ROOT, "src", "runtime", "rom_import.cpp")
+
+
+def rom_manifest():
+    """{set: [(file, size, crc32, shared)]}, read from the importer's tables
+    (src/runtime/rom_import.cpp), so the list is the one the game checks."""
+    src = open(ROM_IMPORT, encoding="utf-8").read()
+    entry = re.compile(r'\{"([^"]+)", 0x([0-9A-Fa-f]+), \w+, 0x[0-9A-Fa-f]+, 0x([0-9A-Fa-f]+)\}')
+    shared_block = re.search(r"#define SHARED_LOADS(.*?)\n\n", src, re.S).group(1)
+    shared = [(f, int(size, 16), int(crc, 16), True) for f, crc, size in entry.findall(shared_block)]
+    sets = {}
+    for var, romset in (("kDaytona93", "daytona93"), ("kDaytona", "daytona")):
+        body = re.search(r"const Load " + var + r"\[\] = \{(.*?)\n\};", src, re.S).group(1)
+        own = [(f, int(size, 16), int(crc, 16), False) for f, crc, size in entry.findall(body)]
+        sets[romset] = own + (shared if "SHARED_LOADS" in body else [])
+    return sets
+
+
+def archive_entries(romset):
+    """{name: (size, crc)} of roms/<set>.zip, or None when there is no zip
+    (a .7z is reported as present but not checked here)."""
+    import zipfile
+    path = os.path.join(ROOT, "roms", romset + ".zip")
+    if not os.path.exists(path):
+        return None
+    try:
+        with zipfile.ZipFile(path) as z:
+            # by file name, ignoring folders, as the importer reads them (src/runtime/zip.cpp)
+            return {i.filename.rsplit("/", 1)[-1]: (i.file_size, i.CRC) for i in z.infolist() if not i.is_dir()}
+    except zipfile.BadZipFile:
+        return {}
+
+
+def list_roms():
+    manifest = rom_manifest()
+    for romset, label in SETS:
+        files = manifest[romset]
+        entries = archive_entries(romset)
+        print(f"\n{label}: roms/{romset}.zip (or .7z), {len(files)} files")
+        if entries is None:
+            seven = os.path.exists(os.path.join(ROOT, "roms", romset + ".7z"))
+            print(f"  roms/{romset}.7z is there; not checked here (setup checks it)" if seven
+                  else f"  roms/{romset}.zip is not there yet")
+        missing = shared_missing = 0
+        for name, size, crc, shared in files:
+            status = ""
+            if entries is not None:
+                got = entries.get(name)
+                status = "ok" if got == (size, crc) else "MISSING" if got is None else \
+                    f"WRONG (size {got[0]:#x}, crc {got[1]:08x})"
+                missing += status != "ok"
+                shared_missing += shared and got is None
+            print(f"  {name:<16} {size:#9x}  {crc:08x}  {'shared' if shared else romset:<9}  {status}".rstrip())
+        if entries is not None:
+            print(f"  {len(files) - missing} of {len(files)} present and correct")
+            shared_count = sum(f[3] for f in files)
+            if shared_missing == shared_count and missing < len(files):
+                print("  All the shared files are missing: a split set keeps them in its parent's archive. "
+                      "Use a merged or non-merged set, or add them to this zip.")
+            names = {f[0] for f in files}
+            other = sorted(n for o, fs in manifest.items() if o != romset for n, _, _, _ in fs
+                           if n not in names and n in entries)
+            if other:
+                print(f"  It also holds {len(other)} file{'s' * (len(other) > 1)} of the other set ({', '.join(other)}): "
+                      "the two sets may have been mixed up.")
+    print("\n'shared' files are the same in both sets.")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--jobs", "-j", type=int, default=None, metavar="N")
+    ap.add_argument("--list-roms", action="store_true")
     ap.add_argument("--test-extras", action="store_true")
     ap.add_argument("--with-mame", action="store_true")
     ap.add_argument("--build-mame", action="store_true")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--build-dir", default="build")
     args = ap.parse_args()
+    if args.list_roms:
+        list_roms()
+        return
+    jobs = args.jobs or default_jobs()
+    if jobs < 1:
+        sys.exit("setup: --jobs must be 1 or more")
     build = os.path.join(ROOT, args.build_dir)
 
     check_toolchain()
@@ -254,7 +341,8 @@ def main():
 
     if args.no_build:
         return
-    configure_and_build(build)
+    print(f"Building with {jobs} parallel jobs (--jobs to change)")
+    configure_and_build(build, jobs=jobs)
 
     games = []  # (set, executable)
     for romset, label in SETS:
@@ -263,9 +351,10 @@ def main():
         set_dir = args.build_dir if romset == "daytona93" else args.build_dir + "-" + romset
         set_build = os.path.join(ROOT, set_dir)
         if set_build != build:
-            configure_and_build(set_build, romset)
+            configure_and_build(set_build, romset, jobs)
         say(f"Recompiling {label} to native code (your ROM set, kept in {set_dir}/)")
-        r = run([sys.executable, os.path.join("scripts", "recompile.py"), "--set", romset, "--build-dir", set_dir],
+        r = run([sys.executable, os.path.join("scripts", "recompile.py"), "--set", romset, "--build-dir", set_dir,
+                 "--jobs", str(jobs)],
                 check=False)
         if r.returncode == 3:  # recompile.py ROM_REJECTED_EXIT
             sys.exit(ROM_REJECTED.format(set=romset))
@@ -280,7 +369,7 @@ def main():
         print(no_rom_help())
 
     say("Running the tests")
-    run(["ctest", "--test-dir", build, "-C", "Release", "--output-on-failure"], check=False)
+    run(["ctest", "--test-dir", build, "-C", "Release", "--output-on-failure", "-j", str(jobs)], check=False)
     say("Done")
     for label, exe in games:
         print(f"\n{label} is built. Start it with:\n\n    " + os.path.relpath(exe, ROOT))

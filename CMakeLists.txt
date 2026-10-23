@@ -20,6 +20,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 if(MSVC)
     # /bigobj: the generated game code has many labels per object file
     add_compile_options(/W4 /fp:strict /bigobj /utf-8)
+    # The Visual Studio generator compiles one file at a time per target
+    # without /MP; setup's --jobs only sets how many targets build at once.
+    if(CMAKE_GENERATOR MATCHES "Visual Studio" AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        add_compile_options(/MP)
+    endif()
 else()
     # No -ffast-math, ever (rules.md): exact rounding is the point. No FP
     # contraction either: a fused multiply-add (ARM64 always has one) rounds

@@ -21,6 +21,11 @@ builds it. You run one command; it takes a while the first time.
    have different program ROMs and are rejected, even if you rename the
    file.
 
+   Each set needs 30 files: 12 of its own and 18 both sets share. To see
+   them all, with sizes and CRC32s, run `python3 scripts/setup.py
+   --list-roms` (`python scripts\setup.py --list-roms` on Windows); with a
+   zip already in `roms/` it also says which files are missing or wrong.
+
 2. **A 64-bit computer** running Windows 10 or 11, macOS, or a common Linux
    distribution (Debian/Ubuntu, Fedora, Arch or openSUSE), with an internet
    connection for the first setup and a few GB of free disk space.
@@ -289,8 +294,10 @@ Fix it and run setup again.
 **`m2import: missing epr-16530a.12`** (or another file), then
 **`your daytona93 ROM set ... was rejected`**
 The file is not the set its name says (`daytona93.zip` must be Deluxe '93,
-`daytona.zip` Revision A), or is incomplete. See
-[What you need](#what-you-need). A set under the other name works; a
+`daytona.zip` Revision A), or is incomplete: `python3 scripts/setup.py
+--list-roms` shows which files are missing or wrong. A split `daytona93`
+set lacks the 18 shared files, which sit in the parent `daytona` set; use a
+merged or non-merged set. See [What you need](#what-you-need). A set under the other name works; a
 different set renamed does not: its program is different.
 
 **`your ROM set was accepted, but recompiling or building the game

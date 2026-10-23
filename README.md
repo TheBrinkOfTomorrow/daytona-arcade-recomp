@@ -71,7 +71,12 @@ distribution's packages on Linux), fetch the pinned dependencies into
 into `build-daytona/`. Already have a toolchain? Run
 `python3 scripts/setup.py` directly.
 
-Options: `--msvc` (setup.ps1 only: Microsoft's compiler), `--test-extras`
+Options: `--jobs N` or `-j N` (how many files compile at once; default one
+per CPU thread, lower it if the build runs out of memory), `--list-roms`
+(lists the 30 files each ROM set must contain, with sizes and CRC32s, and
+checks `roms/daytona93.zip` and `roms/daytona.zip` against them if they are
+there; builds nothing, needs only Python: `python3 scripts/setup.py
+--list-roms`), `--msvc` (setup.ps1 only: Microsoft's compiler), `--test-extras`
 (optional test dependencies), `--with-mame` (MAME source for the oracle
 test), `--build-mame` (the patched MAME that records validation traces;
 Linux and macOS).

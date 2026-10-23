@@ -74,5 +74,48 @@ class VisualStudioSelectionTests(unittest.TestCase):
         run.assert_not_called()
 
 
+class JobsAndRomListTests(unittest.TestCase):
+    def test_jobs_reach_the_build(self):
+        with patch.object(SETUP, "WINDOWS", False), \
+             patch.object(SETUP.shutil, "which", return_value="/usr/bin/ninja"), \
+             patch.object(SETUP, "run") as run, tempfile.TemporaryDirectory() as temp:
+            SETUP.configure_and_build(temp, jobs=6)
+        build = run.call_args_list[-1].args[0]
+        self.assertEqual(build[build.index("--parallel") + 1], "6")
+
+    def test_manifest_matches_the_importer(self):
+        sets = SETUP.rom_manifest()
+        self.assertEqual(sorted(sets), ["daytona", "daytona93"])
+        for romset, program in (("daytona93", "epr-16530a.12"), ("daytona", "epr-16722a.12")):
+            files = sets[romset]
+            names = [f[0] for f in files]
+            self.assertEqual(len(files), 30)
+            self.assertEqual(len(set(names)), 30)
+            self.assertEqual(sum(f[3] for f in files), 18)  # SHARED_LOADS
+            self.assertIn(program, names)
+        self.assertIn(("mpr-16528.10", 0x200000, 0x9CE591F6, True), sets["daytona"])
+
+    def test_list_roms_checks_a_zip(self):
+        import contextlib
+        import io
+        import zipfile
+        files = SETUP.rom_manifest()["daytona"]
+        with tempfile.TemporaryDirectory() as temp:
+            os.mkdir(os.path.join(temp, "roms"))
+            with zipfile.ZipFile(os.path.join(temp, "roms", "daytona.zip"), "w") as z:
+                z.writestr(files[0][0], b"wrong")
+                z.writestr("daytona/" + files[1][0], b"in a folder, as macOS's Compress makes them")
+            out = io.StringIO()
+            with patch.object(SETUP, "ROOT", temp), patch.object(SETUP, "rom_manifest", return_value={
+                    "daytona93": [], "daytona": files}), contextlib.redirect_stdout(out):
+                SETUP.list_roms()
+        text = out.getvalue()
+        self.assertIn("0 of 30 present and correct", text)
+        self.assertIn("WRONG", text)
+        self.assertIn("MISSING", text)
+        self.assertEqual(text.count("WRONG"), 2)  # the one in a folder is found too
+        self.assertNotIn("All the shared files are missing", text)  # nothing of the set is there
+
+
 if __name__ == "__main__":
     unittest.main()

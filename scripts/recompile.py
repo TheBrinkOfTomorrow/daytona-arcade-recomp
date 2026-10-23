@@ -2,7 +2,7 @@
 """Recompile the game's i960 code, its TGP program and the sound board's 68000
 program to native C++ and build them. Same steps on Linux, macOS and Windows.
 
-  recompile.py [--set daytona93|daytona] [--build-dir build] [--config Release] [--fast_inaccuracy]
+  recompile.py [--set daytona93|daytona] [--build-dir build] [--config Release] [--jobs N] [--fast_inaccuracy]
 
 Needs the user's ROM set at roms/<set>.zip or roms/<set>.7z (git-ignored):
 daytona93 (Daytona USA Deluxe '93, the default) or daytona (Revision A,
@@ -60,6 +60,8 @@ def main():
     ap.add_argument("--set", default="daytona93", choices=["daytona93", "daytona"])
     ap.add_argument("--build-dir", default="build")
     ap.add_argument("--config", default="Release")
+    ap.add_argument("--jobs", "-j", type=int, default=os.cpu_count() or 1, metavar="N",
+                    help="files compiled at once (default: one per CPU thread)")
     ap.add_argument("--fast_inaccuracy", action="store_true",
                     help="recompiler speed options (i960 block bookkeeping and direct chunk chaining, TGP block counting): faster (PS Vita), "
                          "not interrupt-exact against MAME")
@@ -78,7 +80,7 @@ def main():
         run(build_cmd + ["--target", "m2import"])
         if subprocess.run([tool(build, args.config, "m2import"), roms[0], cache], cwd=ROOT).returncode:
             sys.exit(ROM_REJECTED_EXIT)  # m2import printed which file is missing or wrong
-    run(build_cmd + ["--target", "m2recomp", "m2tgprecomp", "m2sndrecomp"])
+    run(build_cmd + ["--parallel", str(args.jobs), "--target", "m2recomp", "m2tgprecomp", "m2sndrecomp"])
 
     gen = os.path.join(build, "gen", args.set)
     if os.path.isdir(gen):
@@ -104,7 +106,7 @@ def main():
          os.path.join(snd, "snd_gen.cpp")])
 
     run(["cmake", "-S", ".", "-B", build])  # picks up the generated sources
-    run(build_cmd + ["--parallel"])  # the game (daytona, m2run) and the check tools
+    run(build_cmd + ["--parallel", str(args.jobs)])  # the game (daytona, m2run) and the check tools
 
 
 if __name__ == "__main__":

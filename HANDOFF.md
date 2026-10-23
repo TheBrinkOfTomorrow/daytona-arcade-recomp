@@ -1,5 +1,29 @@
 # Handoff
 
+## Setup --jobs and --list-roms (2026-10-23)
+
+`scripts/setup.py --jobs N` (`-j N`, default `os.cpu_count()`) is passed to
+every `cmake --build --parallel`, to `recompile.py --jobs` (also new, same
+default) and to `ctest -j`. Before, `--parallel` had no count: Ninja's own
+default, `make -j` unbounded with the Makefile generator. With the Visual
+Studio generator `--parallel N` is MSBuild's `/m:N`, which is targets at
+once, not files; CMakeLists.txt now adds `/MP` for MSVC under that
+generator so the game's many generated files compile in parallel. Not added
+for clang-cl (ClangCL toolset), untested there.
+
+`setup.py --list-roms` prints the 30 files each set needs (name, size,
+CRC32, own or shared), read with a regex from the tables in
+`src/runtime/rom_import.cpp` so there is one list; it checks
+`roms/<set>.zip` with Python's zipfile by file name, ignoring folders as
+the importer does (macOS Compress puts the files in a folder; the first
+version missed them all). A `.7z` is only reported as present. It says when
+all 18 shared files are missing (a split `daytona93`) and when the zip holds
+the other set's own files (a mixed-up set).
+`tests/test_setup.py` checks the parse (30 files, 18 shared, per set), the
+zip check and that `--jobs` reaches the build. A no-ROM `setup.py -j 4`
+on Linux GCC built the tools and passed the tests; Windows `/MP` is
+covered only by CI.
+
 ## Scenery selection and polygon budget PR branch (2026-10-08)
 
 Branch `scenery-budget` starts from upstream/main `82201ed`, separate from
