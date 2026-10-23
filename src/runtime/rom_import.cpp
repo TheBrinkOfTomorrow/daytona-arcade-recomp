@@ -118,9 +118,9 @@ const Load kSrallyc[] = {
 // uploads at boot sits, its length and CRC. Daytona's is in main_data (found
 // by matching MAME's upload; the same 2,024 words in both sets). Sega
 // Rally's is in the i960 program ROM: found by its opening jump table, the
-// same as Daytona's, and its length by the last word holding its own index
-// (Daytona's last word is 0x7e7, word 2,023). Not yet checked against MAME's
-// upload.
+// same as Daytona's, and matched word for word with MAME's upload (1,665
+// words; the game runs this ROM from its copy in work RAM, see the design
+// document).
 struct Set {
     const char *name;
     const Load *loads;
@@ -132,7 +132,7 @@ struct Set {
 const Set kSets[] = {
     {"daytona93", kDaytona93, std::size(kDaytona93), 0x900000, MainData, 0x860020, 2024, 0xD6D611DDu},
     {"daytona", kDaytona, std::size(kDaytona), 0x800000, MainData, 0x800020, 2024, 0xD6D611DDu},
-    {"srallyc", kSrallyc, std::size(kSrallyc), 0, Program, 0x05AE94, 1666, 0x5C529C56u},
+    {"srallyc", kSrallyc, std::size(kSrallyc), 0, Program, 0x05AE94, 1665, 0x072484B1u},
 };
 
 const Set &this_set() {

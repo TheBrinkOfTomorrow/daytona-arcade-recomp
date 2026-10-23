@@ -471,15 +471,27 @@ board (`epr-16726`). No protection: srallyc is not a `model2a_5881` set.
 | Sound | Model 1 sound board: 68000, YM3438, 2 MultiPCM | 68000 at 11.29 MHz and one SCSP at 22.58 MHz, 8 MB of samples |
 | main_data | ROM_COPY mirrors from 0x900000 / 0x800000 | none; data up to 0xc00000 |
 | Model ROM | 16 MB region | 32 MB region, 8 MB loaded |
-| TGP program | main_data 0x860020 / 0x800020, 2,024 words | i960 program ROM 0x05ae94, 1,666 words (provisional) |
+| TGP program | main_data 0x860020 / 0x800020, 2,024 words | i960 program ROM 0x05ae94, 1,665 words |
+| Where the i960 runs | ROM | from work RAM: boot copies program ROM 0x1000-0x60fff to 0x5a0000-0x5fffff and calls 0x5a2150 |
+| Geometrizer program | not uploaded (open question) | uploaded: 17,341 `geo_prg_w` writes in 600 attract frames |
 | MAME | working | `MACHINE_NOT_WORKING`: enemy car placement slightly off, possibly i960 wait states |
 
-**TGP program (provisional):** found by searching the images for Daytona's
-opening TGP jump table (`100060bf 060060bf 060060bf 060060bf`): none in
-main_data, one copy at 0x05ae94 in the program ROM. Its length assumes
-Daytona's convention that the last word holds its own index (Daytona's word
-2,023 is 0x7e7; Sega Rally's word 1,665 is 0x681). CRC 0x5c529c56. To be
-confirmed against MAME's upload (`geo_prg_w` / copro boot writes) before M2.
+**TGP program:** found by searching the images for Daytona's opening TGP
+jump table (`100060bf 060060bf 060060bf 060060bf`): none in main_data, one
+copy at 0x05ae94 in the program ROM. MAME's upload (`M2TRACE_TGPLOG`, 600
+attract frames) is 1,665 words, equal word for word; CRC 0x072484b1. A
+first guess of 1,666 words, from Daytona's last word 0x7e7 being its own
+index (2,023), was wrong: Sega Rally's word 1,665 (0x681) follows the
+program and is not uploaded.
+
+**Code in RAM (found in the first MAME trace):** the i960 copies 384 KB of
+its program ROM (0x1000-0x60fff) to the top of work RAM (0x5a0000-0x5fffff)
+at boot and runs there: 99 of the 104 harvested indirect-branch sites and
+the interrupt handlers (0x5a0820, 0x5a08b0) are in that copy. The copy is
+unchanged at attract epochs 5 and 510 (every dword equal to the ROM), so it
+can be recompiled from the ROM image at its RAM address, with a check that
+the copy is the ROM's. Daytona runs from ROM; the recompiler and `reach`
+need a code region mapped from RAM addresses to ROM bytes.
 
 **Consequences for the design:**
 
@@ -496,7 +508,12 @@ confirmed against MAME's upload (`geo_prg_w` / copro boot writes) before M2.
 - The 68000 recompiler assumes no indirect jumps (true for Daytona's
   program); Sega Rally's sound program must be checked.
 
-**Next (M0, then M1):** confirm the TGP upload in MAME; record srallyc traces
-with the `m2trace` plugin; the 2A-CRX memory map and 315-5649 in
-`m2_board`; seeds for the i960 program; boot to attract in lockstep with
-sound stubbed.
+**MAME and the billboard:** `model2a` adds a Sega billboard device, whose
+ROM (`epr-18022.ic2`) is a separate device set, `segabill`: put
+`roms/segabill.zip` beside `roms/srallyc.7z` or MAME refuses to start
+srallyc. srallyc routes 315-5649 port E to the drive board, so the
+billboard is not connected to the game.
+
+**Next (M1):** the 2A-CRX memory map and 315-5649 in `m2_board`; RAM-mapped
+code in `reach` and `m2recomp`; seeds from the harvest; boot to attract in
+lockstep with sound stubbed.

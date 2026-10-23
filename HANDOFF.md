@@ -1,5 +1,27 @@
 # Handoff
 
+## Sega Rally: TGP upload confirmed, first MAME traces (2026-10-23)
+
+Patched Model-2 MAME built on Linux (about 20 minutes, 4 cores). srallyc
+needs MAME's `segabill` device set (`roms/segabill.zip`, `epr-18022.ic2`)
+as well. 600 attract frames: 60 s at 16% speed, 515 epochs from frame 82,
+21,798,656 device events, a 371 MB trace (not committed); two runs are
+identical by `tracediff`. A first run without `segabill`, through a local
+MAME edit removing the unconnected billboard, differed by 4 events: use
+only traces made with `segabill`.
+
+- TGP program: MAME uploads 1,665 words, word for word the importer's
+  0x05ae94 block; importer now 1,665 words, CRC 0x072484b1 (was 1,666, a
+  wrong length guess; see the design doc).
+- The i960 runs from work RAM: ROM 0x1000-0x60fff copied to
+  0x5a0000-0x5fffff, unchanged at epochs 5 and 510. 99 of 104 harvested
+  indirect sites are there. The recompiler needs RAM-mapped code (M1).
+- The game uploads geometrizer code (17,341 `geo_prg_w` writes).
+- 21.6 M video-control reads in 600 frames: a polling loop.
+- m2trace plugin: srallyc sets hash 256 KB at 0x00200000 and record IN2
+  (hand brake); Daytona's regions and fields are unchanged (lua mock and
+  core tests, 19 and 19 checks, pass).
+
 ## Sega Rally (srallyc) M0: importer and board type (2026-10-23)
 
 Second game, design doc section "Second game: Sega Rally Championship". The

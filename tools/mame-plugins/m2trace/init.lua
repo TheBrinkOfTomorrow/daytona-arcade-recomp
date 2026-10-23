@@ -69,6 +69,21 @@ local IRQ_ACK = 0x00e80000
 local INPUT_PORTS = { ":IN0", ":IN1", ":GEARS", ":STEER", ":ACCEL", ":BRAKE" }
 local GEAR_BITS = { port = ":IN1", mask = 0x70 } -- computed from GEARS, not replayed
 
+-- Model 2A-CRX sets (Sega Rally): 256 KB of RAM at 0x00200000 instead of
+-- 128 KB and a program ROM mirror, and the hand brake on IN2. 0x01c00000 is
+-- the 315-5649 I/O chip there, still tapped as "dpram". Daytona's regions
+-- and fields are unchanged, so its recorded traces and inputs still match.
+local MODEL2A = { srallyc = true, srallycb = true, srallycc = true, srallycdx = true, srallycdxa = true }
+local configured = false
+local function configure_for_system()
+	if configured then return end
+	configured = true
+	if MODEL2A[emu.romname()] then
+		REGIONS[1] = { 0x00200000, 0x0023ffff }
+		INPUT_PORTS[#INPUT_PORTS + 1] = ":IN2"
+	end
+end
+
 local cfg = {}
 local out            -- trace file
 local epoch = 0
@@ -259,6 +274,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local function on_start()
+	configure_for_system()
 	cpu = manager.machine.devices[":maincpu"]
 	space = cpu.spaces["program"]
 	screen = manager.machine.screens[":screen"]
