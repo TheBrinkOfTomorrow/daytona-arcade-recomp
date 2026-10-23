@@ -5,7 +5,7 @@
 #   ./setup.sh [--test-extras] [--with-mame] [--build-mame]
 #
 # Linux: apt (Debian/Ubuntu), dnf (Fedora/RHEL), pacman (Arch) or zypper
-# (openSUSE); uses sudo. macOS: Xcode command line tools and Homebrew.
+# (openSUSE); uses sudo. macOS: Xcode command line tools and Homebrew or MacPorts.
 # Put your own ROM set at roms/daytona93.zip (Deluxe '93) and/or
 # roms/daytona.zip (Revision A, 1994) to have the game recompiled too.
 set -eu
@@ -62,19 +62,26 @@ Darwin)
         xcode-select --install || true
         exit 1
     fi
-    if ! command -v brew >/dev/null 2>&1; then
-        echo "setup.sh: Homebrew is needed (https://brew.sh). Install it with:" >&2
-        echo '  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"' >&2
+    # Prefer MacPorts when both package managers are installed.
+    if command -v port >/dev/null 2>&1; then
+        echo "setup.sh: installing macOS dependencies with MacPorts"
+        $SUDO port install cmake ninja python314 git sdl3 pkgconf
+        # MacPorts installs a versioned Python; expose it as python3 for setup.py.
+        $SUDO port select --set python3 python314
+        PATH="/opt/local/bin:/opt/local/sbin:$PATH"
+        export PATH
+    elif command -v brew >/dev/null 2>&1; then
+        echo "setup.sh: installing macOS dependencies with Homebrew"
+        # SDL 3 needs only the system frameworks (Cocoa, Metal) on macOS.
+        brew install cmake ninja python git
+        # MAME validation uses SDL 3 via pkg-config.
+        [ "$BUILD_MAME" = 1 ] && brew install sdl3 pkgconf
+    else
+        echo "setup.sh: install Homebrew (https://brew.sh) or MacPorts (https://www.macports.org)," >&2
         echo "then run ./setup.sh again." >&2
         exit 1
     fi
-    # SDL 3 needs only the system frameworks (Cocoa, Metal) on macOS
-    brew install cmake ninja python git
-    # MAME's build (validation only): its macOS front end is SDL 3, found
-    # through pkg-config (without it MAME looks for an SDL3 framework instead)
-    [ "$BUILD_MAME" = 1 ] && brew install sdl3 pkgconf
-    ;;
-*)
+    ;;*)
     echo "setup.sh: $(uname -s) not supported here; on Windows run setup.ps1" >&2
     exit 1
     ;;
