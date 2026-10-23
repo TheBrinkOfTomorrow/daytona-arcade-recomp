@@ -81,7 +81,8 @@ Darwin)
         echo "then run ./setup.sh again." >&2
         exit 1
     fi
-    ;;*)
+    ;;
+*)
     echo "setup.sh: $(uname -s) not supported here; on Windows run setup.ps1" >&2
     exit 1
     ;;
