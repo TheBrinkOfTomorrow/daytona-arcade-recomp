@@ -303,6 +303,8 @@ struct Emitter {
             case 0x59b: two("t1 >= 32 ? (int32_t(t2) < 0 ? 0xffffffffu : 0u) : uint32_t(int32_t(t2) >> t1)"); break; // shri
             case 0x59c: case 0x59e: two("t1 >= 32 ? 0u : t2 << t1"); break; // shlo, shli
             case 0x59d: two("std::rotl(t2, int(t1 & 0x1f))"); break;       // rotate
+            case 0x5b0: body = "{ const uint32_t t1 = " + s1(in) + ", t2 = " + s2(in) + "; const uint32_t r = t2 + (t1 + ((AC >> 1) & 1)); " +
+                               d + " = r; AC = (AC & ~3u) | (((r ^ t1) & (r ^ t2) & 0x80000000u) ? 1u : 0u); }"; break; // addc (MAME: 32-bit sum, so C is never set)
             case 0x5a0: body = "AC = (AC & ~7u) | gen::cc_u(" + s1(in) + ", " + s2(in) + ");"; break; // cmpo
             case 0x5a1: body = "AC = (AC & ~7u) | gen::cc_s(int32_t(" + s1(in) + "), int32_t(" + s2(in) + "));"; break; // cmpi
             case 0x5a2: body = "if (!(AC & 4)) AC = (AC & ~7u) | (" + s1(in) + " <= " + s2(in) + " ? 2u : 1u);"; break; // concmpo
@@ -355,7 +357,7 @@ struct Emitter {
                         set("gen::f2u(float(double(int32_t(" + s1(in) + "))))"); break;
             case 0x677: if (in.m2 || in.m3) return unsupported(in);         // scaler: integer src1, real src2/dst
                         set("gen::f2u(float(double(gen::u2f(" + R(in.src2) + ")) * std::pow(2.0, double(int32_t(" + s1(in) + ")))))"); break;
-            case 0x685: if (in.m1 || in.m2) return unsupported(in);         // cmpr
+            case 0x685: if (in.m1 || in.m2) { body = "{ constexpr uint32_t w = " + hex(in.word) + "; AC = (AC & ~7u) | gen::cc_d(gen::rif1(c, w), gen::rif2(c, w)); }"; break; } // cmpr
                         body = "AC = (AC & ~7u) | gen::cc_d(double(gen::u2f(" + R(in.src1) + ")), double(gen::u2f(" + R(in.src2) + ")));"; break; // cmpr
             case 0x6c0: if (in.m1) return unsupported(in);                  // cvtri: real src1, integer dst
                         set("uint32_t(int32_t(gen::round_to_int(double(gen::u2f(" + R(in.src1) + ")), AC)))"); break; // cvtri
@@ -386,6 +388,10 @@ struct Emitter {
             case 0x6c3: if (in.m3) return unsupported(in);                  // cvtzril: real src1, long integer dst
                         body = "{ const uint64_t v = uint64_t(int64_t(gen::rif1(c, " + hex(in.word) + "))); " + d + " = uint32_t(v); " +
                                R(in.dst + 1) + " = uint32_t(v >> 32); }"; break;
+            case 0x695: body = "{ constexpr uint32_t w = " + hex(in.word) + "; AC = (AC & ~7u) | gen::cc_d(gen::rifl1(c, w), gen::rifl2(c, w)); }"; break; // cmprl
+            case 0x680: fp("set_rif", "std::atan2(gen::rif2(c, w), gen::rif1(c, w))"); break; // atanr
+            case 0x683: fp("set_rif", "std::fmod(gen::rif2(c, w), gen::rif1(c, w))"); break;  // remr
+            case 0x6e2: fp("set_rifl", "gen::rifl2(c, w) >= 0.0 ? std::fabs(gen::rifl1(c, w)) : -std::fabs(gen::rifl1(c, w))"); break; // cpysre
             case 0x66d: body = "gen::flushreg(c);"; break;                 // flushreg
             default: return unsupported(in);
             }

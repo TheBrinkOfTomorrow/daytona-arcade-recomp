@@ -498,7 +498,8 @@ need a code region mapped from RAM addresses to ROM bytes.
 - A board type beside the set: CMake's `M2_BOARD` (`model2o` or `model2a`).
   Until the 2A-CRX board exists the srallyc build makes the tools only, and
   `recompile.py --set srallyc` recompiles the i960 code and builds
-  `m2native` (devices replayed from the trace); no game target yet.
+  `m2native` (native TGP and geometrizer, other devices replayed from the
+  trace); no game target yet.
 - MAME is still the lockstep oracle for i960 and TGP parity, but its
   placement bug means a full-race match is not proof of correctness here:
   the PCB, or the MiSTer core's 2A-CRX work, settles it.
@@ -535,6 +536,24 @@ interrupts). What it took:
   0x600000 on the SCSP board, not Daytona's map, so `m2sndrecomp` finds no
   code and emits an empty table.
 
-**Next (M2):** the TGP and geometrizer natively (the game uploads geometrizer
-code); then the 2A-CRX board in `m2_board` (315-5649 I/O, EEPROM) and the
-SCSP sound map.
+**M2, TGP and geometrizer native (done):** a 3,000-frame attract trace
+(2,915 epochs) matches MAME with the
+native TGP and geometrizer: 568,032,855 i960 instructions all native
+(10,772 recompiled from 184 seeds), 43,387,815 TGP instructions and 65,214
+output words, 2,341,426 polygons and 58,996,207 rasterizer words, 1,640 of
+1,640 3D frames and 2,996 of 2,996 composed screens identical to MAME.
+
+- The 2A-CRX geometry ports are `model2_tgp_mem`'s, as on the original
+  Model 2, so `TgpBoard` and `rt::Geo` serve srallyc unchanged. The
+  geometrizer program upload (`geo_prg_w` with the upload bit set) is
+  ignored here as in MAME: MAME's geometrizer is fixed-function, so parity
+  with it says nothing about that microcode (the PCB or the MiSTer core
+  settles it).
+- More templates from the longer run: `cmpr`/`cmprl` on any operand,
+  `atanr`, `remr`, `cpysre`, `addc` (MAME sums in 32 bits, so its carry
+  out is never set; mirrored for lockstep).
+- Seeds: every `bx`/`callx`/`irq`/`iac` target in both harvests.
+
+**Next (M3):** the 2A-CRX board in `m2_board` (315-5649 I/O, EEPROM,
+work RAM map) and a game target, with SCSP sound stubbed; then the SCSP
+68000 map (vectors at 0x600000) and a native SCSP.

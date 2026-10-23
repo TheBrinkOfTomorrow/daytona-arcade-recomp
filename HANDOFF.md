@@ -1,5 +1,22 @@
 # Handoff
 
+## Sega Rally M2: TGP and geometrizer native (2026-10-23)
+
+3,000-frame srallyc attract trace (MAME with `M2TRACE_IRQLOG`, `_TGPLOG`
+and `_GEOLOG`; 1.8 GB trace, 1 GB GEO log, not committed). `m2native`:
+MATCH, 568,032,855 instructions all native (10,772 recompiled, 8 chunks),
+2,915 epochs, 107,667,230 device events, 31,071 interrupts; TGP 43,387,815
+instructions, 65,214 output words identical; geometrizer 2,341,426
+polygons and 58,996,207 rasterizer words identical; 3D layer 1,640 of
+1,640 and screens 2,996 of 2,996 frames identical; 36.5 s.
+
+- m2native always runs the TGP board model (2A-CRX uses the same
+  `model2_tgp_mem` ports).
+- seeds/srallyc.txt: 184 targets (both harvests).
+- m2recomp templates: general `cmpr`, `cmprl`, `atanr`, `remr`, `cpysre`,
+  `addc` (MAME's 32-bit sum: no carry out).
+- The 600-frame M1 trace still matches.
+
 ## Sega Rally M1: i960 parity, all native (2026-10-23)
 
 `m2native` on the 600-frame srallyc attract trace: MATCH, 116,533,145
