@@ -62,25 +62,54 @@ Darwin)
         xcode-select --install || true
         exit 1
     fi
-    # Prefer MacPorts when both package managers are installed.
-    if command -v port >/dev/null 2>&1; then
-        echo "setup.sh: installing macOS dependencies with MacPorts"
-        $SUDO port install cmake ninja python314 git sdl3 pkgconf
-        # MacPorts installs a versioned Python; expose it as python3 for setup.py.
-        $SUDO port select --set python3 python314
-        PATH="/opt/local/bin:/opt/local/sbin:$PATH"
-        export PATH
-    elif command -v brew >/dev/null 2>&1; then
-        echo "setup.sh: installing macOS dependencies with Homebrew"
-        # SDL 3 needs only the system frameworks (Cocoa, Metal) on macOS.
-        brew install cmake ninja python git
-        # MAME validation uses SDL 3 via pkg-config.
-        [ "$BUILD_MAME" = 1 ] && brew install sdl3 pkgconf
-    else
-        echo "setup.sh: install Homebrew (https://brew.sh) or MacPorts (https://www.macports.org)," >&2
-        echo "then run ./setup.sh again." >&2
-        exit 1
-    fi
+
+    # Intel Macs prefer MacPorts; Apple Silicon Macs prefer Homebrew.
+    # Fall back to the other package manager if the preferred one is absent.
+    case "$(uname -m)" in
+        x86_64)
+            if command -v port >/dev/null 2>&1; then
+                MACOS_PKG=port
+            elif command -v brew >/dev/null 2>&1; then
+                MACOS_PKG=brew
+            else
+                MACOS_PKG=""
+            fi
+            ;;
+        arm64)
+            if command -v brew >/dev/null 2>&1; then
+                MACOS_PKG=brew
+            elif command -v port >/dev/null 2>&1; then
+                MACOS_PKG=port
+            else
+                MACOS_PKG=""
+            fi
+            ;;
+        *)
+            echo "setup.sh: unsupported macOS architecture: $(uname -m)" >&2
+            exit 1
+            ;;
+    esac
+
+    case "$MACOS_PKG" in
+        port)
+            echo "setup.sh: installing macOS dependencies with MacPorts ($(uname -m))"
+            $SUDO port install cmake ninja python314 git sdl3 pkgconf
+            $SUDO port select --set python3 python314
+            PATH="/opt/local/bin:/opt/local/sbin:$PATH"
+            export PATH
+            ;;
+        brew)
+            echo "setup.sh: installing macOS dependencies with Homebrew ($(uname -m))"
+            # SDL 3 uses the system Cocoa and Metal frameworks on macOS.
+            brew install cmake ninja python git
+            [ "$BUILD_MAME" = 1 ] && brew install sdl3 pkgconf
+            ;;
+        *)
+            echo "setup.sh: install MacPorts (https://www.macports.org) or Homebrew (https://brew.sh)," >&2
+            echo "then run ./setup.sh again." >&2
+            exit 1
+            ;;
+    esac
     ;;
 *)
     echo "setup.sh: $(uname -s) not supported here; on Windows run setup.ps1" >&2
