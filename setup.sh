@@ -65,6 +65,7 @@ Darwin)
 
     # Intel Macs prefer MacPorts; Apple Silicon Macs prefer Homebrew.
     # Fall back to the other package manager if the preferred one is absent.
+    # compiling now roks thanks to joesayegh for being this up and testing 
     case "$(uname -m)" in
         x86_64)
             if command -v port >/dev/null 2>&1; then
