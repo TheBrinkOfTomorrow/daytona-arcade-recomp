@@ -15,6 +15,8 @@ streams buffered, TCP link play.
 - The Daytona and Sega Rally libraries linked into one C program and run
   interleaved, frame by frame: both hashes unchanged. `nm -D`: one symbol.
 - Static dependencies are built position-independent when `M2_CORE` is on.
+- `recompile.py --core` builds only the core (`--rom PATH` takes the ROM
+  set from anywhere): what a front end's build script runs per game.
 
 ## Sega Rally linked play (2026-10-24)
 

@@ -74,15 +74,21 @@ def main():
     ap.add_argument("--fast_inaccuracy", action="store_true",
                     help="recompiler speed options (i960 block bookkeeping and direct chunk chaining, TGP block counting): faster (PS Vita), "
                          "not interrupt-exact against MAME")
+    ap.add_argument("--rom", metavar="PATH", help="the ROM set (.zip or .7z) if not at roms/<set>.zip")
+    ap.add_argument("--core", action="store_true",
+                    help="build only the game core library (m2core, include/m2core.h) instead of the game and tools")
     args = ap.parse_args()
     build = os.path.join(ROOT, args.build_dir)
     cache = os.path.join(build, "rom_cache", args.set)
     roms = [os.path.join(ROOT, "roms", args.set + "." + ext) for ext in ("zip", "7z")]
     roms = [r for r in roms if os.path.exists(r)]
+    if args.rom:
+        roms = [os.path.abspath(args.rom)]
 
     build_cmd = ["cmake", "--build", build, "--config", args.config]
     # the build directory is for one ROM set (CMake's M2_ROMSET)
-    run(["cmake", "-S", ".", "-B", build, "-DCMAKE_BUILD_TYPE=" + args.config, "-DM2_ROMSET=" + args.set])
+    run(["cmake", "-S", ".", "-B", build, "-DCMAKE_BUILD_TYPE=" + args.config, "-DM2_ROMSET=" + args.set,
+         "-DM2_CORE=" + ("ON" if args.core else "OFF")])
     samples = "samples.bin" if args.set in MODEL2A_SETS else "pcm1.bin"  # SCSP or MultiPCM sound board
     if not all(os.path.exists(os.path.join(cache, f)) for f in ("tgp_program.bin", "sound_program.bin", samples)):
         if not roms:
@@ -121,6 +127,10 @@ def main():
          os.path.join(snd, "snd_gen.cpp")] + (["--model2a"] if args.set in MODEL2A_SETS else [])
         + (["--seeds", snd_seeds] if os.path.exists(os.path.join(ROOT, snd_seeds)) else []))
 
+    if args.core:
+        run(["cmake", "-S", ".", "-B", build])  # picks up the generated sources
+        run(build_cmd + ["--parallel", str(args.jobs), "--target", "m2core"])
+        return
     run(["cmake", "-S", ".", "-B", build])  # picks up the generated sources
     run(build_cmd + ["--parallel", str(args.jobs)])  # the game (daytona, m2run) and the check tools
 
