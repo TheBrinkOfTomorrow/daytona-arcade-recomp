@@ -335,6 +335,7 @@ if(EXISTS ${GEN_DIR}/gen_table.cpp AND EXISTS ${TGP_GEN} AND EXISTS ${SND_GEN})
         if(APPLE)
             set_target_properties(m2core PROPERTIES FRAMEWORK TRUE
                 MACOSX_FRAMEWORK_IDENTIFIER org.m2core.${M2_ROMSET}
+                INSTALL_NAME_DIR @rpath BUILD_WITH_INSTALL_NAME_DIR ON # embedded in an app
                 PUBLIC_HEADER ${CMAKE_SOURCE_DIR}/include/m2core.h)
             target_link_options(m2core PRIVATE "LINKER:-exported_symbol,_m2core_api_${M2_ROMSET}")
         elseif(WIN32)

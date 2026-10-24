@@ -17,6 +17,7 @@ streams buffered, TCP link play.
 - Static dependencies are built position-independent when `M2_CORE` is on.
 - `recompile.py --core` builds only the core (`--rom PATH` takes the ROM
   set from anywhere): what a front end's build script runs per game.
+- On Apple the framework's install name is `@rpath/...`, for embedding.
 
 ## Sega Rally linked play (2026-10-24)
 
