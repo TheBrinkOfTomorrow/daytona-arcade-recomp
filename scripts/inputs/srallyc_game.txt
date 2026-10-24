@@ -1,0 +1,11 @@
+# Sega Rally: a whole game on one credit. Two coins (one credit), start,
+# automatic car, full throttle with no steering: the Desert stage finishes,
+# the Forest stage runs out of time, then game over and back to attract.
+frames 9600
+1000-1005 coin=1
+1050-1055 coin=1
+1100-1105 start=1
+1300-1305 start=1
+1500-1505 start=1
+1700-1705 start=1
+1900-8600 accel=255

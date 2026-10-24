@@ -1,5 +1,23 @@
 # Handoff
 
+## Sega Rally linked play (2026-10-24)
+
+Sega Rally Twin links like Daytona: its comm board is the same M2COMM at
+the same addresses, so `rt::CommBoard` and the TCP ring work unchanged.
+
+- Set the cabinet in test mode > GAME ASSIGNMENTS > LINK TYPE: CAR 1 is
+  the master, CAR 2 the next (factory NOTLINK).
+  `scripts/inputs/srallyc_link_car{1,2}.txt` do it in `m2run` with
+  `--save-nvram`.
+- Launcher help and the link status line name LINK TYPE on model2a.
+- Checked: two `m2run` cabinets on localhost (`--nvram` from those runs,
+  `--link-listen`/`--link-next` each other): "Network Check Success",
+  cabinet 1 and 2 of 2, both race Desert at POSITION /2 and see each other;
+  also with `--link-sync`. ctest 21/21 on both boards.
+- `scripts/make_input.py`: start is 0x40 on srallyc headers.
+  `scripts/inputs/srallyc_game.txt`: one credit, Desert finished, Forest
+  timed out, game over, attract (9,600 frames), for the MAME comparison.
+
 ## Default to a Release build (2026-10-23)
 
 A build directory configured without a build type (`recompile.py` on a

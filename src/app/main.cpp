@@ -123,7 +123,8 @@ std::string link_status(const rt::CommBoard *board, const app::TcpLink *link, co
     if (!cfg.link) return "off";
     if (!board || !link) return "not started";
     switch (board->link()) {
-    case rt::CommBoard::Link::Off: return "on (the game has not started the link: set LINK ID in test mode)";
+    case rt::CommBoard::Link::Off: return rt::kModel2a ? "on (the game has not started the link: set LINK TYPE in test mode)"
+                                                     : "on (the game has not started the link: set LINK ID in test mode)";
     case rt::CommBoard::Link::Waiting: {
         // which half of the ring is missing
         std::string s = "waiting: ";

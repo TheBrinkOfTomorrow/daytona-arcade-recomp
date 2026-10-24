@@ -471,9 +471,13 @@ Launcher::Result Launcher::draw(bool game_running, const Devices &devices) {
             ImGui::TextDisabled("Cabinets link in a ring over the network (Wi-Fi or wired): each listens on its\n"
                                 "port and connects to the next; with two, each one's next is the other. Every\n"
                                 "computer can use the same port: e.g. 15112, and Next cabinet = the other\n"
-                                "computer's address:15112. In test mode (F2) > GAME SYSTEM set LINK ID (one\n"
-                                "MASTER, the others SLAVE) and a different CAR NUMBER on each. The 1994 set\n"
-                                "(Revision A) has link play.");
+                                "computer's address:15112.");
+            if (rt::kModel2a)
+                ImGui::TextDisabled("In test mode (F2) > GAME ASSIGNMENTS set LINK TYPE: CAR 1 on one (the\n"
+                                    "master), CAR 2 on the next, and so on; the other settings the same on all.");
+            else
+                ImGui::TextDisabled("In test mode (F2) > GAME SYSTEM set LINK ID (one MASTER, the others SLAVE)\n"
+                                    "and a different CAR NUMBER on each. The 1994 set (Revision A) has link play.");
 
             ImGui::Spacing();
             ImGui::Separator();

@@ -30,14 +30,16 @@ CONTROLS = {
     "steer": (":STEER", 0xFF), "accel": (":ACCEL", 0xFF), "brake": (":BRAKE", 0xFF),
 }
 ANALOG = {"steer", "accel", "brake"}
+# Sega Rally (Model 2A-CRX) moves start to 0x40 (rt::kIn0Start).
+MODEL2A_START = (":IN0", 0x40)
 
 
 def read_header(blob):
     assert blob[:4] == b"M2IN" and struct.unpack_from("<I", blob, 4)[0] == 1, "not an M2IN v1 stream"
     p = 8
     n = struct.unpack_from("<H", blob, p)[0]
-    head_start = p
-    p += 2 + n  # game
+    game = blob[p + 2:p + 2 + n].decode()
+    p += 2 + n
     nf = struct.unpack_from("<H", blob, p)[0]
     p += 2
     fields = []
@@ -48,12 +50,15 @@ def read_header(blob):
         mask, defv, analog = struct.unpack_from("<IIB", blob, p)
         p += 9
         fields.append((port, mask, defv, bool(analog)))
-    return blob[:p], fields
+    return blob[:p], game, fields
 
 
 def main():
     header_path, script_path, out_path = sys.argv[1:4]
-    header, fields = read_header(open(header_path, "rb").read())
+    header, game, fields = read_header(open(header_path, "rb").read())
+    controls = dict(CONTROLS)
+    if game.startswith("srallyc"):
+        controls["start"] = MODEL2A_START
     index = {(port, mask): i for i, (port, mask, _, _) in enumerate(fields)}
 
     total = 0
@@ -70,9 +75,9 @@ def main():
         lo, _, hi = rng.partition("-")
         lo, hi = int(lo), int(hi or lo)
         name, _, val = assign.partition("=")
-        if name not in CONTROLS:
+        if name not in controls:
             sys.exit(f"{script_path}:{lineno}: unknown control {name}")
-        port, mask = CONTROLS[name]
+        port, mask = controls[name]
         fi = index[(port, mask)]
         _, _, defv, analog = fields[fi]
         v = int(val, 0)

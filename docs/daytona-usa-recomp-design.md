@@ -636,5 +636,14 @@ down, 6,000 frames at about 150 frames/s headless. The game target is
   it (one volume; Daytona's music/effects split and native audio stay
   Daytona-only).
 
-**Next:** linked play (Sega Rally Twin, the comm board), then a full-race
-comparison with MAME.
+**Linked play (done):** Sega Rally's 2A-CRX link board (837-11525) is the
+same M2COMM as Daytona's at the same addresses (MAME `model2_base_mem`,
+frame offset 0x1c0), so the transplanted `rt::CommBoard` and the app's TCP
+ring carry it unchanged. The game's own setting picks the cabinet: test
+mode > GAME ASSIGNMENTS > LINK TYPE, CAR 1 (the master), CAR 2, ...
+(factory NOTLINK). Checked with two headless `m2run` cabinets on localhost
+(`scripts/inputs/srallyc_link_car1.txt`/`car2.txt` set it): "Network Check
+Success", node 1 and 2 of 2, both race Desert with POSITION /2 and each
+sees the other's car; with and without frame sync.
+
+**Next:** a full-game comparison with MAME (`scripts/inputs/srallyc_game.txt`).
