@@ -44,6 +44,9 @@ streams buffered, TCP link play.
 - `recompile.py --core` builds only the core (`--rom PATH` takes the ROM
   set from anywhere): what a front end's build script runs per game.
 - On Apple the framework's install name is `@rpath/...`, for embedding.
+- `-DM2_APP=OFF` skips SDL and the windowed app: a core-only build for
+  iOS or tvOS (`CMAKE_SYSTEM_NAME`, with `M2_GEN_ROOT` at a host build's
+  generated code).
 
 ## Sega Rally linked play (2026-10-24)
 

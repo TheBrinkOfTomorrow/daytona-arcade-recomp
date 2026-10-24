@@ -215,7 +215,9 @@ target_link_libraries(m2sndrecomp PRIVATE m68k)
 # and the app's own code. Built whenever SDL is there, ROM set or not, so CI
 # compiles all of it; the daytona executable itself also needs the generated
 # game code (below).
-if(EXISTS ${CMAKE_SOURCE_DIR}/extern/sdl3/CMakeLists.txt)
+# M2_APP=OFF leaves it out (a core-only build for another platform).
+option(M2_APP "Build the windowed app when SDL is there" ON)
+if(M2_APP AND EXISTS ${CMAKE_SOURCE_DIR}/extern/sdl3/CMakeLists.txt)
     if(ANDROID)
         # SDLActivity loads libSDL3.so before the game's libmain.so.
         set(M2_SDL_TARGET SDL3::SDL3-shared)
