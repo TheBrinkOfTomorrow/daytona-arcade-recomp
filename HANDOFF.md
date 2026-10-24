@@ -1,5 +1,21 @@
 # Handoff
 
+## Core library with a C interface (2026-10-24)
+
+`-DM2_CORE=ON` builds `m2core_<romset>` (a `.so`/`.dylib`, a framework on
+Apple) from the generated code and the runtime, with `include/m2core.h`:
+one exported symbol per game (`m2core_api_daytona93`, `_daytona`,
+`_srallyc`) returning a function table. `src/core/m2core.cpp` does what
+the app does around `rt::GameLoop`: ROM zip/7z or m2import folder, the
+app's control mapping, EEPROM and backup RAM in a save folder, both sound
+streams buffered, TCP link play.
+
+- `m2coreshot ROM FRAMES` (C): Sega Rally 1,200 frames, screen hash
+  2e007e4918e0a776, the same as `m2run`; Daytona 2666687f65e4b47c, same.
+- The Daytona and Sega Rally libraries linked into one C program and run
+  interleaved, frame by frame: both hashes unchanged. `nm -D`: one symbol.
+- Static dependencies are built position-independent when `M2_CORE` is on.
+
 ## Sega Rally linked play (2026-10-24)
 
 Sega Rally Twin links like Daytona: its comm board is the same M2COMM at

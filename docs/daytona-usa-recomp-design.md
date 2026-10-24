@@ -376,6 +376,19 @@ The generated code is plain portable C++20 (no host assembly, no JIT), so the sa
 - It then runs the recompiler and a bundled compiler step, or, simpler for users, loads a prebuilt runtime plus a generated shared library compiled on first run. Decision pending (see Open questions).
 - Assets (textures, samples) stay in the ROM images; nothing is extracted to loose files.
 
+**Core library (other front ends)**
+
+`-DM2_CORE=ON` also builds the game as a library with a C interface
+(`include/m2core.h`, `src/core/m2core.cpp`): `m2core_<romset>`, a shared
+library, or a framework on Apple platforms, that exports one symbol,
+`m2core_api_<romset>()`, a table of functions (create from the ROM set or
+an m2import folder, run a frame, the screen, the two sound streams, save,
+link play). Everything else is hidden (exported-symbol list or version
+script), so one process can hold several games, each with its own
+generated code and `rt::` runtime. It is for front ends outside this repo,
+such as a launcher app for several games; the app here stays as it is.
+`m2coreshot` drives it from C.
+
 **Other runtime features**
 
 - Settings UI (Dear ImGui overlay): controls, enhancements, audio, link peers, DIP-switch equivalents.
