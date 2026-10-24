@@ -56,6 +56,10 @@ public:
     void set_clock(std::function<uint64_t()> ticks) { eeprom_.set_clock(std::move(ticks)); }
     uint8_t read(uint32_t offset);
     void write(uint32_t offset, uint8_t data);
+    // The bits of a read at `offset` that come from the controls (switches,
+    // pedals, wheel), as the chip is set up now: what a check against a run
+    // with other inputs must not compare.
+    uint8_t input_bits(uint32_t offset) const;
 
 private:
     uint8_t port_in(uint32_t port);

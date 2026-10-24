@@ -659,4 +659,10 @@ mode > GAME ASSIGNMENTS > LINK TYPE, CAR 1 (the master), CAR 2, ...
 Success", node 1 and 2 of 2, both race Desert with POSITION /2 and each
 sees the other's car; with and without frame sync.
 
-**Next:** a full-game comparison with MAME (`scripts/inputs/srallyc_game.txt`).
+**Full game against MAME (done):** `scripts/inputs/srallyc_game.txt`, one
+credit through Desert, Forest, game over and attract (9,600 frames): every
+i960 instruction, TGP output word, polygon and composed screen identical
+to MAME, the I/O chip and EEPROM native (controls measured), and the sound
+68000 in lockstep over 110.7 million instructions. Open: the sound
+board's clock is instructions, not 68000 cycles (MAME's rate varies with
+the instruction mix: 776,428 a second in attract, 663,000 in a race).

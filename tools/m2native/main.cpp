@@ -26,8 +26,9 @@
 
 namespace {
 // Model 2A-CRX: the 315-5649 I/O chip and the EEPROM modelled natively
-// (strict: every read must equal MAME's), with the inputs at rest, in
-// front of the TGP board model.
+// (strict: every read must equal MAME's), in front of the TGP board model.
+// The controls are MAME's: bits that come from them are measured (MAME's
+// value used), so a run with inputs replayed still checks everything else.
 class IoModel : public rt::DeviceModel {
 public:
     explicit IoModel(rt::DeviceModel &next) : next_(next) {}
@@ -36,11 +37,14 @@ public:
     Check read(uint32_t a, uint32_t mask, uint32_t &v) override {
         if (!mine(a)) return next_.read(a, mask, v);
         const uint32_t i = ((a & 0x1f) >> 2) * 2;
+        inputs_ = ((mask & 0x000000ff) ? uint32_t(io_.input_bits(i)) : 0) |
+                  ((mask & 0x00ff0000) ? uint32_t(io_.input_bits(i + 1)) << 16 : 0);
         v = ((mask & 0x000000ff) ? uint32_t(io_.read(i)) : 0) | ((mask & 0x00ff0000) ? uint32_t(io_.read(i + 1)) << 16 : 0);
         if (dbg_) std::fprintf(stderr, "R %08x %08x %08x\n", a, mask, v);
         // port B carries the EEPROM's DO: how long a write keeps it busy
         // depends on time, which we only estimate (measured; other bits strict)
-        return a == 0x01c00000 && (mask & 0x00ff0000) ? Measured : Strict;
+        do_ = a == 0x01c00000 && (mask & 0x00ff0000) ? 0x00200000u : 0;
+        return do_ || inputs_ ? Measured : Strict;
     }
     void write(uint32_t a, uint32_t data, uint32_t mask) override {
         if (!mine(a)) return next_.write(a, data, mask);
@@ -51,19 +55,21 @@ public:
     }
     void measured_mismatch(uint32_t a, uint32_t ours, uint32_t mame) override {
         if (!mine(a)) return next_.measured_mismatch(a, ours, mame);
-        if ((ours ^ mame) & ~0x00200000u) {
+        if ((ours ^ mame) & ~(do_ | inputs_)) {
             char b[96];
             std::snprintf(b, sizeof b, "I/O read %08x: ours %08x, MAME %08x", a, ours, mame);
             throw rt::Divergence(b);
         }
-        ++do_mismatch;
+        ++((ours ^ mame) & do_ ? do_mismatch : input_reads);
     }
     uint64_t do_mismatch = 0; // EEPROM busy reads that differ
+    uint64_t input_reads = 0; // reads whose controls differ (MAME's taken)
     const uint8_t *region(uint32_t base) const override { return next_.region(base); }
 
 private:
     static bool mine(uint32_t a) { return a >= 0x01c00000 && a <= 0x01c0001f; }
     rt::DeviceModel &next_;
+    uint32_t do_ = 0, inputs_ = 0; // the last read's measured bits
     bool dbg_ = std::getenv("M2_NATIVE_IO_LOG") != nullptr;
     rt::IoBoard board_;
     rt::Io5649 io_{board_};
@@ -144,7 +150,8 @@ int main(int argc, char **argv) {
                         geocheck->scr_mismatch ? "; first difference " : "", geocheck->first_scr_mismatch.c_str());
         }
         if (rt::kModel2a && std::getenv("M2_NATIVE_IO"))
-            std::printf("  I/O chip and EEPROM (native): strict except EEPROM busy reads, %" PRIu64 " of which differ\n", io.do_mismatch);
+            std::printf("  I/O chip and EEPROM (native): strict except EEPROM busy reads, %" PRIu64 " of which differ,"
+                        " and the controls (MAME's), %" PRIu64 " reads\n", io.do_mismatch, io.input_reads);
         if (geo.buffer_mismatch) std::printf("  first buffer RAM difference: %s\n", geo.first_buffer_mismatch.c_str());
         if (geo.status_mismatch) std::printf("  first FIFO-status difference: %s\n", geo.first_status_mismatch.c_str());
         return 0;

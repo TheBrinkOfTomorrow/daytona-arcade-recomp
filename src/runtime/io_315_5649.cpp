@@ -160,6 +160,17 @@ void Io5649::port_out(uint32_t port, uint8_t data) {
     }
 }
 
+uint8_t Io5649::input_bits(uint32_t offset) const {
+    offset &= 0x1f;
+    if (offset == 0x0f) return 0xff; // the analogue inputs
+    if (offset > 6 || !((port_config_ >> offset) & 1)) return 0;
+    switch (offset) {
+    case 1: return ctrlmode_ ? 0x0f : 0xff; // in0_r: DO and fixed bits in control mode
+    case 2: case 3: return 0xff;            // IN1, IN2
+    default: return 0;                      // DIP switches, unwired ports
+    }
+}
+
 uint8_t Io5649::read(uint32_t offset) {
     offset &= 0x1f;
     switch (offset) {

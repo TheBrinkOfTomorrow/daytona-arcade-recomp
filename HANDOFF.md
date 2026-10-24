@@ -1,5 +1,31 @@
 # Handoff
 
+## Sega Rally: a whole game identical to MAME (2026-10-24)
+
+`scripts/inputs/srallyc_game.txt` (one credit: Desert finished, Forest out
+of time, game over, attract; 9,600 frames, 2 min 47 s) recorded in MAME
+with every log, then checked:
+
+- `m2native` (devices replayed): MATCH, 1,625,221,851 instructions, 101,188
+  interrupts; TGP 291,653,259 instructions; geometrizer 9,597 frames,
+  8,015,631 polygons; 3D layer 8,134 of 8,134 and the composed screen 9,596
+  of 9,596 frames identical to MAME.
+- `M2_NATIVE_IO=1 m2native` (I/O chip and EEPROM native): MATCH. The
+  controls are MAME's: `Io5649::input_bits` says which bits of a read come
+  from them, and the IoModel measures only those (6,761 reads) and the
+  EEPROM busy bit; everything else stays strict.
+- `m2tgpcheck`: MATCH. `m2sndcheck`: MATCH, 110,684,287 instructions and
+  177,563 interrupts. It now takes the level of each interrupt from the
+  handler's first snapshot: MAME's log line carries the level asserted
+  when the interrupt starts, which had risen from 1 to 2 since it was
+  sampled at one point (MAME entered the level 1 handler).
+- Audio: `m2run --wav` against MAME's `-wavwrite`, per-second loudness:
+  the same curve over the 166 s, within a second where it shifts.
+- Open: the sound board's clock is a fixed 776,428 instructions a second
+  (60 s of attract); MAME's 68000 ran 663,000 a second over this game (a
+  different instruction mix). The program idles between interrupts, so it
+  only moves events within a frame; 68000 cycle counts would fix it.
+
 ## Core library with a C interface (2026-10-24)
 
 `-DM2_CORE=ON` builds `m2core_<romset>` (a `.so`/`.dylib`, a framework on

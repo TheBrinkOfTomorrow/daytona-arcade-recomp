@@ -120,6 +120,10 @@ int main(int argc, char **argv) {
             Snap p{};
             s >> std::dec >> p.idx >> std::hex >> p.pc >> p.sr;
             for (uint32_t &r : p.r) s >> r;
+            // The level MAME's 68000 took is the mask in the handler's first
+            // snapshot: its log line has the level asserted when the
+            // interrupt starts, which can have risen since it was sampled.
+            if (!irqs.empty() && irqs.back().first == p.idx) irqs.back().second = int((p.sr >> 8) & 7);
             snaps.push_back(p);
         }
     }
